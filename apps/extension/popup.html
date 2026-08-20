@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Save to Tessera</title>
+  <style>
+    :root {
+      --bg: #0b1329;
+      --surface: #121e3a;
+      --surface2: #18284d;
+      --border: rgba(148, 163, 184, 0.14);
+      --text: #f1f5f9;
+      --text-dim: #94a3b8;
+      --teal: #38bdf8;
+      --teal-dim: rgba(56, 189, 248, 0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 320px;
+      padding: 16px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+    }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .brand { font-weight: 700; font-size: 14px; color: var(--teal); letter-spacing: -0.2px; }
+    .badge { font-size: 9px; font-family: monospace; background: var(--teal-dim); color: var(--teal); padding: 1px 5px; border-radius: 3px; }
+    .form-group { margin-bottom: 10px; }
+    label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; font-weight: 500; }
+    input, textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 9px;
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--teal); }
+    .btn {
+      width: 100%;
+      background: var(--teal);
+      color: #031020;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 12.5px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .status { margin-top: 8px; font-size: 11.5px; text-align: center; color: #4ade80; display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="brand">Tessera</span>
+    <span class="badge">E2E ENCRYPTED</span>
+  </div>
+  <form id="save-form">
+    <div class="form-group">
+      <label for="url">URL</label>
+      <input type="url" id="url" required />
+    </div>
+    <div class="form-group">
+      <label for="title">Title</label>
+      <input type="text" id="title" required />
+    </div>
+    <div class="form-group">
+      <label for="tags">Tags (comma separated)</label>
+      <input type="text" id="tags" placeholder="privacy, reading, tools" />
+    </div>
+    <div class="form-group">
+      <label for="notes">Notes</label>
+      <textarea id="notes" rows="2" placeholder="Private note..."></textarea>
+    </div>
+    <button type="submit" class="btn">Save to Library</button>
+  </form>
+  <div id="status" class="status">✓ Saved locally & queued for sync</div>
+
+  <script type="module" src="src/popup.ts"></script>
+</body>
+</html>
