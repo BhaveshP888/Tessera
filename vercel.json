@@ -1,6 +1,7 @@
 {
-  "buildCommand": "bun run build",
-  "outputDirectory": "apps/web/dist",
+  "version": 2,
+  "buildCommand": "bun run vercel-build",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
