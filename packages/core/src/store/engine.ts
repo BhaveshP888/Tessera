@@ -105,7 +105,7 @@ export class LocalStoreEngine {
     this.storage = options.storage || (typeof window !== 'undefined' ? new BrowserLocalStorageAdapter() : new MemoryStorageAdapter());
     this.prefix = options.prefix || 'tessera_v1_';
     this.syncServerUrl = options.syncServerUrl || 'http://127.0.0.1:8787';
-    this.fetchFn = options.fetchFn || globalThis.fetch;
+    this.fetchFn = (url, init) => (options.fetchFn || globalThis.fetch)(url, init);
 
     // 1. Device ID
     const savedDeviceId = this.storage.getItem(`${this.prefix}deviceId`);
@@ -552,7 +552,27 @@ export class LocalStoreEngine {
           for (const delta of data.deltas) {
             if (delta.deviceId === this.deviceId) continue;
 
-            // 1. Try Master Key
+            // Handle Collection entity deltas
+            if (delta.entityType === 'collection') {
+              const colRecordKey = deriveRecordKey(this.masterKey, delta.entityId);
+              const unsealedCol = unsealRecord<Collection>(colRecordKey, delta.ciphertext, delta.nonce);
+              if (unsealedCol.data) {
+                const incomingCol = unsealedCol.data;
+                pulledCount++;
+                const existingIdx = this.collections.findIndex(
+                  (c) => c.id === incomingCol.id || c.name.toLowerCase() === incomingCol.name.toLowerCase(),
+                );
+                if (existingIdx >= 0) {
+                  this.collections[existingIdx] = incomingCol;
+                } else {
+                  this.collections = [...this.collections, incomingCol];
+                }
+                this.persist('collections', this.collections);
+              }
+              continue;
+            }
+
+            // 1. Try Master Key for Bookmarks
             const recordKey = deriveRecordKey(this.masterKey, delta.entityId);
             let unsealed = unsealRecord<Bookmark>(recordKey, delta.ciphertext, delta.nonce);
 
@@ -601,6 +621,7 @@ export class LocalStoreEngine {
           this.syncCursor = data.nextCursor;
           this.persist('bookmarks', this.bookmarks);
           this.persist('deletedTombstones', this.deletedTombstones);
+          this.persist('collections', this.collections);
         }
       }
 
