@@ -9,6 +9,15 @@ import {
 } from '@tessera/core';
 import type { SyncDelta, SyncPushRequest, SyncPullRequest } from '@tessera/schemas';
 
+const normalizeUrl = (raw: string): string => {
+  let u = raw.trim().replace(/\/+$/, '');
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) {
+    u = `https://${u}`;
+  }
+  return u;
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   const urlInput = document.getElementById('url') as HTMLInputElement;
   const titleInput = document.getElementById('title') as HTMLInputElement;
@@ -79,17 +88,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       masterKeyInput.value = masterKeyBase64;
     }
 
-    // Render locally known collections first
     renderCollections(localCollections);
 
-    if (serverUrl) {
-      syncDot.className = 'sync-indicator online';
-      syncLabel.textContent = 'CLOUD READY';
+    const cleanUrl = normalizeUrl(serverUrl);
 
-      // If Master Key is present, attempt live pull of real collection entities from cloud
-      if (masterKeyBase64) {
-        try {
-          const cleanUrl = serverUrl.replace(/\/+$/, '');
+    if (cleanUrl) {
+      syncDot.className = 'sync-indicator online';
+      syncLabel.textContent = 'CONNECTING...';
+
+      try {
+        // Test health endpoint first
+        const healthRes = await fetch(`${cleanUrl}/api/health`);
+        if (!healthRes.ok) {
+          throw new Error(`Server returned ${healthRes.status}`);
+        }
+
+        syncDot.className = 'sync-indicator online';
+        syncLabel.textContent = 'CLOUD READY';
+
+        // If Master Key is present, pull real collections
+        if (masterKeyBase64.trim()) {
           const pullPayload: SyncPullRequest = {
             deviceId: 'browser-extension',
             sinceCursor: 0,
@@ -105,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (res.ok) {
             const body = (await res.json()) as { deltas: SyncDelta[] };
             const pulledCollections = new Set<string>(localCollections);
-            const masterKey = base64ToUint8Array(masterKeyBase64);
+            const masterKey = base64ToUint8Array(masterKeyBase64.trim());
 
             for (const delta of body.deltas || []) {
               if (delta.entityType === 'collection' && delta.ciphertext && delta.nonce) {
@@ -115,22 +133,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                   if (unsealed?.data?.name) {
                     pulledCollections.add(unsealed.data.name);
                   }
-                } catch {}
+                } catch (err) {
+                  console.warn('[Tessera Extension] Failed to unseal collection:', err);
+                }
               }
             }
 
             const updatedList = Array.from(pulledCollections);
             renderCollections(updatedList);
 
-            // Persist back to storage
             if (typeof chrome !== 'undefined' && chrome.storage) {
               await chrome.storage.local.set({ tessera_collections: updatedList });
             }
           }
-        } catch {
-          syncDot.className = 'sync-indicator';
-          syncLabel.textContent = 'OFFLINE';
         }
+      } catch (err) {
+        console.error('[Tessera Extension] Cloud connection failed:', err);
+        syncDot.className = 'sync-indicator';
+        syncLabel.textContent = 'OFFLINE';
       }
     } else {
       syncDot.className = 'sync-indicator';
@@ -140,7 +160,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Save Settings handler
   btnSaveSettings.addEventListener('click', async () => {
-    const serverUrl = serverUrlInput.value.trim();
+    const rawServerUrl = serverUrlInput.value.trim();
+    const serverUrl = normalizeUrl(rawServerUrl);
     const masterKey = masterKeyInput.value.trim();
 
     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -152,7 +173,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     settingsDrawer.classList.remove('open');
     statusEl.className = 'status status-info';
-    statusEl.textContent = '⚙️ Sync settings saved. Fetching collections...';
+    statusEl.textContent = '⚙️ Testing cloud connection...';
     statusEl.style.display = 'block';
 
     await refreshCollectionsAndStatus();
@@ -224,16 +245,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     let pushedToCloud = false;
+    let pushErrorMessage = '';
 
     // Check if cloud sync is available
     if (typeof chrome !== 'undefined' && chrome.storage) {
       const data = await chrome.storage.local.get(['tessera_server_url', 'tessera_master_key']);
-      const serverUrl = data['tessera_server_url'];
-      const masterKeyBase64 = data['tessera_master_key'];
+      const rawServerUrl = data['tessera_server_url'] || '';
+      const masterKeyBase64 = data['tessera_master_key'] || '';
+      const cleanUrl = normalizeUrl(rawServerUrl);
 
-      if (serverUrl && masterKeyBase64) {
+      if (cleanUrl && masterKeyBase64.trim()) {
         try {
-          const masterKey = base64ToUint8Array(masterKeyBase64);
+          const masterKey = base64ToUint8Array(masterKeyBase64.trim());
           const deltasToPush: SyncDelta[] = [];
 
           // If new collection created, push collection delta too
@@ -280,7 +303,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             deltas: deltasToPush,
           };
 
-          const cleanUrl = serverUrl.replace(/\/+$/, '');
           const res = await fetch(`${cleanUrl}/api/sync/push`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -289,8 +311,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           if (res.ok) {
             pushedToCloud = true;
+          } else {
+            const errText = await res.text();
+            pushErrorMessage = `Server ${res.status}: ${errText}`;
+            console.error('[Tessera Extension] Push failed:', pushErrorMessage);
           }
-        } catch {}
+        } catch (err) {
+          pushErrorMessage = (err as Error).message;
+          console.error('[Tessera Extension] Push error:', err);
+        }
       }
 
       // Always save to quick queue as backup
@@ -306,10 +335,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    statusEl.className = `status ${isVault ? 'status-vault' : 'status-library'}`;
-    statusEl.textContent = pushedToCloud
-      ? (isVault ? '🔒 Synced to Cloud Vault & Saved' : '✓ Synced to Cloud Library & Saved')
-      : (isVault ? '🔒 Saved to Local Vault & Queued' : '✓ Saved to Local Library & Queued');
+    if (pushErrorMessage) {
+      statusEl.className = 'status status-vault';
+      statusEl.textContent = `Saved locally (Cloud push: ${pushErrorMessage})`;
+    } else {
+      statusEl.className = `status ${isVault ? 'status-vault' : 'status-library'}`;
+      statusEl.textContent = pushedToCloud
+        ? (isVault ? '🔒 Synced to Cloud Vault & Saved' : '✓ Synced to Cloud Library & Saved')
+        : (isVault ? '🔒 Saved to Local Vault & Queued' : '✓ Saved to Local Library & Queued');
+    }
     statusEl.style.display = 'block';
 
     btnSaveLibrary.disabled = true;
@@ -317,7 +351,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setTimeout(() => {
       window.close();
-    }, 1200);
+    }, 1400);
   };
 
   btnSaveLibrary.addEventListener('click', () => handleSave(false));
