@@ -53,7 +53,11 @@ let engineInstance: LocalStoreEngine | null = null;
 const getEngine = (): LocalStoreEngine => {
   if (!engineInstance) {
     const serverUrl = getInitialServerUrl();
-    engineInstance = new LocalStoreEngine({ syncServerUrl: serverUrl });
+    const boundFetch = typeof window !== 'undefined' ? window.fetch.bind(window) : undefined;
+    engineInstance = new LocalStoreEngine({
+      syncServerUrl: serverUrl,
+      fetchFn: boundFetch,
+    });
   }
   return engineInstance;
 };

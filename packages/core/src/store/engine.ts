@@ -104,8 +104,13 @@ export class LocalStoreEngine {
   constructor(options: LocalStoreEngineOptions = {}) {
     this.storage = options.storage || (typeof window !== 'undefined' ? new BrowserLocalStorageAdapter() : new MemoryStorageAdapter());
     this.prefix = options.prefix || 'tessera_v1_';
-    this.syncServerUrl = options.syncServerUrl || 'http://127.0.0.1:8787';
-    this.fetchFn = (url, init) => (options.fetchFn || globalThis.fetch)(url, init);
+    this.syncServerUrl = (options.syncServerUrl || 'http://127.0.0.1:8787').trim().replace(/\/+$/, '');
+
+    const boundDefaultFetch = typeof window !== 'undefined' && typeof window.fetch === 'function'
+      ? window.fetch.bind(window)
+      : (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : fetch);
+
+    this.fetchFn = options.fetchFn ? options.fetchFn : boundDefaultFetch;
 
     // 1. Device ID
     const savedDeviceId = this.storage.getItem(`${this.prefix}deviceId`);
