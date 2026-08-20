@@ -15,7 +15,15 @@ export class SyncRelayStore {
   private storageFilePath: string;
 
   constructor() {
-    const dataDir = process.env['DATA_DIR'] || path.resolve(process.cwd(), 'data');
+    let dataDir = process.env['DATA_DIR'];
+    if (!dataDir) {
+      if (process.env['VERCEL'] || process.env['AWS_LAMBDA_FUNCTION_NAME']) {
+        dataDir = path.join('/tmp', 'tessera-data');
+      } else {
+        dataDir = path.resolve(process.cwd(), 'data');
+      }
+    }
+
     try {
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
@@ -42,12 +50,16 @@ export class SyncRelayStore {
         }
       }
     } catch (err) {
-      console.error('[SyncRelayStore] Failed to load changelog from disk:', err);
+      console.warn('[SyncRelayStore] Could not load changelog from disk:', err);
     }
   }
 
   private saveToDisk(): void {
     try {
+      const dir = path.dirname(this.storageFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
       const data = {
         globalCursor: this.globalCursor,
         changelog: this.changelog,
@@ -55,7 +67,7 @@ export class SyncRelayStore {
       };
       fs.writeFileSync(this.storageFilePath, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err) {
-      console.error('[SyncRelayStore] Failed to persist changelog to disk:', err);
+      console.warn('[SyncRelayStore] Could not persist changelog to disk (memory relay active):', err);
     }
   }
 

@@ -38,11 +38,22 @@ const safeJsonParse = <T>(key: string, fallback: T): T => {
   }
 };
 
+const getInitialServerUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    if (window.location.port === '3000' || window.location.port === '5173') {
+      return 'http://localhost:8787';
+    }
+    return window.location.origin;
+  }
+  return 'http://localhost:8787';
+};
+
 // Singleton engine instance across React renders
 let engineInstance: LocalStoreEngine | null = null;
 const getEngine = (): LocalStoreEngine => {
   if (!engineInstance) {
-    engineInstance = new LocalStoreEngine();
+    const serverUrl = getInitialServerUrl();
+    engineInstance = new LocalStoreEngine({ syncServerUrl: serverUrl });
   }
   return engineInstance;
 };
@@ -57,15 +68,7 @@ export const useLibraryStore = () => {
   const [pendingDeltasCount, setPendingDeltasCount] = useState<number>(() => engine.getPendingDeltasCount());
   const [masterKeyBase64, setMasterKeyBase64] = useState<string>(() => engine.getMasterKeyBase64());
   const [isSyncing, setIsSyncing] = useState<boolean>(() => engine.getIsSyncing());
-  const [syncServerUrl, setSyncServerUrlState] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.port === '3000' || window.location.port === '5173') {
-        return 'http://localhost:8787';
-      }
-      return window.location.origin;
-    }
-    return 'http://localhost:8787';
-  });
+  const [syncServerUrl, setSyncServerUrlState] = useState<string>(getInitialServerUrl);
 
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -159,6 +162,26 @@ export const useLibraryStore = () => {
       }
     }).catch(() => {});
   }, [collections, engine]);
+
+  // Auto-sync with cloud relay on mount, tab focus, and every 10 seconds
+  useEffect(() => {
+    // Initial sync
+    engine.sync().catch(() => {});
+
+    const handleFocus = () => {
+      engine.sync().catch(() => {});
+    };
+
+    window.addEventListener('focus', handleFocus);
+    const interval = setInterval(() => {
+      engine.sync().catch(() => {});
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [engine]);
 
   // Sync server URL update
   const setSyncServerUrl = useCallback((url: string) => {

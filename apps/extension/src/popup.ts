@@ -5,10 +5,9 @@ import {
   base64ToUint8Array,
   deriveRecordKey,
   sealRecord,
-  uint8ArrayToBase64,
   unsealRecord,
 } from '@tessera/core';
-import type { SyncDelta } from '@tessera/schemas';
+import type { SyncDelta, SyncPushRequest, SyncPullRequest } from '@tessera/schemas';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const urlInput = document.getElementById('url') as HTMLInputElement;
@@ -91,10 +90,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (masterKeyBase64) {
         try {
           const cleanUrl = serverUrl.replace(/\/+$/, '');
+          const pullPayload: SyncPullRequest = {
+            deviceId: 'browser-extension',
+            sinceCursor: 0,
+            limit: 300,
+          };
+
           const res = await fetch(`${cleanUrl}/api/sync/pull`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sinceCursor: 0 }),
+            body: JSON.stringify(pullPayload),
           });
 
           if (res.ok) {
@@ -103,12 +108,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const masterKey = base64ToUint8Array(masterKeyBase64);
 
             for (const delta of body.deltas || []) {
-              if (delta.entityType === 'collection' && delta.operation !== 'delete' && delta.encryptedData) {
+              if (delta.entityType === 'collection' && delta.ciphertext && delta.nonce) {
                 try {
-                  const recordKey = await deriveRecordKey(masterKey, delta.entityId, 'collection');
-                  const unsealed = await unsealRecord(delta.encryptedData, recordKey);
-                  if (unsealed?.name) {
-                    pulledCollections.add(unsealed.name);
+                  const recordKey = deriveRecordKey(masterKey, delta.entityId);
+                  const unsealed = unsealRecord<{ name?: string }>(recordKey, delta.ciphertext, delta.nonce);
+                  if (unsealed?.data?.name) {
+                    pulledCollections.add(unsealed.data.name);
                   }
                 } catch {}
               }
@@ -188,14 +193,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     let selectedCollection = collectionSelect.value;
+    let newCollectionId: string | null = null;
+
     if (selectedCollection === '__new__') {
       selectedCollection = customColInput.value.trim();
-      if (selectedCollection && typeof chrome !== 'undefined' && chrome.storage) {
-        const existing = (await chrome.storage.local.get('tessera_collections'))?.['tessera_collections'] || [];
-        if (!existing.includes(selectedCollection)) {
-          await chrome.storage.local.set({
-            tessera_collections: [...existing, selectedCollection],
-          });
+      if (selectedCollection) {
+        newCollectionId = crypto.randomUUID();
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          const existing = (await chrome.storage.local.get('tessera_collections'))?.['tessera_collections'] || [];
+          if (!existing.includes(selectedCollection)) {
+            await chrome.storage.local.set({
+              tessera_collections: [...existing, selectedCollection],
+            });
+          }
         }
       }
     }
@@ -206,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       url: rawUrl,
       title: rawTitle || rawUrl,
       collection: selectedCollection || null,
-      collectionId: selectedCollection || null,
+      collectionId: newCollectionId || selectedCollection || null,
       isVault: Boolean(isVault),
       tags: tagsInput.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
       notes: notesInput.value.trim(),
@@ -224,26 +234,57 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (serverUrl && masterKeyBase64) {
         try {
           const masterKey = base64ToUint8Array(masterKeyBase64);
-          const recordKey = await deriveRecordKey(masterKey, bookmarkId, 'bookmark');
-          const sealed = await sealRecord(bookmarkData, recordKey);
+          const deltasToPush: SyncDelta[] = [];
 
-          const delta: SyncDelta = {
+          // If new collection created, push collection delta too
+          if (newCollectionId && selectedCollection) {
+            const colKey = deriveRecordKey(masterKey, newCollectionId);
+            const sealedCol = sealRecord(colKey, {
+              id: newCollectionId,
+              name: selectedCollection,
+              color: '#38bdf8',
+              createdAt: new Date().toISOString(),
+            });
+            deltasToPush.push({
+              id: crypto.randomUUID(),
+              entityType: 'collection',
+              entityId: newCollectionId,
+              deviceId: 'browser-extension',
+              lamportTs: Date.now(),
+              vectorClock: { 'browser-extension': 1 },
+              ciphertext: sealedCol.ciphertext,
+              nonce: sealedCol.nonce,
+              createdAt: new Date().toISOString(),
+            });
+          }
+
+          // Seal Bookmark
+          const recordKey = deriveRecordKey(masterKey, bookmarkId);
+          const sealed = sealRecord(recordKey, bookmarkData);
+
+          deltasToPush.push({
             id: crypto.randomUUID(),
-            deviceId: 'browser-extension',
-            timestamp: Date.now(),
-            version: 1,
-            operation: 'upsert',
             entityType: 'bookmark',
             entityId: bookmarkId,
-            encryptedData: sealed,
-            nonce: sealed.slice(0, 32),
+            deviceId: 'browser-extension',
+            lamportTs: Date.now(),
+            vectorClock: { 'browser-extension': 1 },
+            ciphertext: sealed.ciphertext,
+            nonce: sealed.nonce,
+            createdAt: new Date().toISOString(),
+          });
+
+          const pushBody: SyncPushRequest = {
+            deviceId: 'browser-extension',
+            clientCursor: 0,
+            deltas: deltasToPush,
           };
 
           const cleanUrl = serverUrl.replace(/\/+$/, '');
           const res = await fetch(`${cleanUrl}/api/sync/push`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deltas: [delta] }),
+            body: JSON.stringify(pushBody),
           });
 
           if (res.ok) {
