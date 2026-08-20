@@ -122,6 +122,44 @@ export const useLibraryStore = () => {
     return engine.subscribe(syncFromEngine);
   }, [engine]);
 
+  // Bidirectional Extension Bridge
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+
+    // 1. Sync live collections to extension
+    const colNames = collections.map((c) => c.name);
+    chrome.storage.local.set({ tessera_collections: colNames }).catch(() => {});
+
+    // 2. Drain any extension quick-save queue
+    chrome.storage.local.get(['tessera_quick_queue']).then((result) => {
+      const queue = result?.['tessera_quick_queue'];
+      if (Array.isArray(queue) && queue.length > 0) {
+        for (const item of queue) {
+          let collectionId: string | null = null;
+          if (item.collection) {
+            const found = engine.getCollections().find((c) => c.name.toLowerCase() === item.collection.toLowerCase());
+            if (found) {
+              collectionId = found.id;
+            } else {
+              const newCol = engine.addCollection(item.collection);
+              collectionId = newCol.id;
+            }
+          }
+
+          engine.addBookmark({
+            url: item.url,
+            title: item.title || item.url,
+            tags: item.tags || [],
+            notes: item.notes || '',
+            collectionId,
+            isVault: Boolean(item.isVault),
+          });
+        }
+        chrome.storage.local.set({ tessera_quick_queue: [] }).catch(() => {});
+      }
+    }).catch(() => {});
+  }, [collections, engine]);
+
   // Sync server URL update
   const setSyncServerUrl = useCallback((url: string) => {
     setSyncServerUrlState(url);
