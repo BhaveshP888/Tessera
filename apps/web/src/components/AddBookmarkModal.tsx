@@ -252,6 +252,9 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
           borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: '520px',
+          maxHeight: 'calc(100vh - 48px)',
+          display: 'flex',
+          flexDirection: 'column',
           boxShadow: 'var(--shadow-lg)',
           overflow: 'hidden',
         }}
@@ -265,6 +268,7 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
             justifyContent: 'space-between',
             padding: '16px 20px',
             borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -283,7 +287,17 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            overflowY: 'auto',
+            flex: 1,
+          }}
+        >
           {/* URL Input with Autofill button */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>

@@ -121,6 +121,9 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
           borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: '400px',
+          maxHeight: 'calc(100vh - 48px)',
+          display: 'flex',
+          flexDirection: 'column',
           boxShadow: 'var(--shadow-lg)',
           overflow: 'hidden',
           textAlign: 'center',
@@ -135,6 +138,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
             justifyContent: 'space-between',
             padding: '14px 18px',
             borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -146,7 +150,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
           </button>
         </div>
 
-        <div style={{ padding: '22px 18px' }}>
+        <div style={{ padding: '22px 18px', overflowY: 'auto', flex: 1 }}>
           {isWiped ? (
             <div style={{ padding: '16px 0' }}>
               <div

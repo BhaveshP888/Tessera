@@ -153,6 +153,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
             justifyContent: 'space-between',
             padding: '16px 20px',
             borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -169,7 +170,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
           </button>
         </div>
 
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1 }}>
           {/* Extension Cards */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {installedExtensions.map((ext) => (

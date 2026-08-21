@@ -194,6 +194,9 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
           borderRadius: 'var(--radius-lg)',
           width: '100%',
           maxWidth: '540px',
+          maxHeight: 'calc(100vh - 48px)',
+          display: 'flex',
+          flexDirection: 'column',
           boxShadow: 'var(--shadow-lg)',
           overflow: 'hidden',
         }}
@@ -207,6 +210,7 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
             justifyContent: 'space-between',
             padding: '16px 20px',
             borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -218,7 +222,16 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
           </button>
         </div>
 
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div
+          style={{
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '18px',
+            overflowY: 'auto',
+            flex: 1,
+          }}
+        >
           {/* Info banner */}
           <div
             style={{

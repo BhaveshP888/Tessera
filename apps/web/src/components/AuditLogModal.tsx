@@ -73,6 +73,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, a
             justifyContent: 'space-between',
             padding: '16px 20px',
             borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
