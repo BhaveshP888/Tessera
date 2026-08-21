@@ -39,6 +39,7 @@ interface SidebarProps {
   onOpenVaultSettingsModal: () => void;
   onLockVault: () => void;
   deviceId: string;
+  isCollapsed?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -64,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenVaultSettingsModal,
   onLockVault,
   deviceId,
+  isCollapsed = false,
 }) => {
   const [isAddingCollection, setIsAddingCollection] = useState(false);
   const [newColName, setNewColName] = useState('');
@@ -97,6 +99,254 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Compact Icon-Only Sidebar Mode
+  if (isCollapsed) {
+    return (
+      <aside
+        style={{
+          width: '56px',
+          borderRight: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          height: 'calc(100vh - 57px)',
+          overflowY: 'auto',
+          padding: '14px 6px',
+          userSelect: 'none',
+          gap: '4px',
+          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        {/* Library */}
+        <button
+          type="button"
+          onClick={() => {
+            onSelectSection('library');
+            onSelectView('all');
+            onSelectCollection(null);
+            onSelectTag(null);
+          }}
+          title={`Library (${allBookmarksCount} bookmarks)`}
+          style={{
+            width: '38px',
+            height: '38px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)',
+            background:
+              activeSection === 'library' && viewFilter === 'all' && !selectedCollectionId && !selectedTag
+                ? 'var(--surface-hover)'
+                : 'transparent',
+            color:
+              activeSection === 'library' && viewFilter === 'all' && !selectedCollectionId && !selectedTag
+                ? 'var(--accent)'
+                : 'var(--text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          <BookmarkIcon size={17} style={{ color: 'var(--accent)' }} />
+        </button>
+
+        {/* Private Vault */}
+        <button
+          type="button"
+          onClick={handleVaultClick}
+          title={isVaultUnlocked ? 'Private Vault (Unlocked)' : isVaultConfigured ? 'Private Vault (Locked)' : 'Setup Private Vault'}
+          style={{
+            width: '38px',
+            height: '38px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)',
+            background: activeSection === 'vault' ? 'var(--surface-hover)' : 'transparent',
+            color: activeSection === 'vault' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          {isVaultUnlocked ? (
+            <Unlock size={17} style={{ color: 'var(--green)' }} />
+          ) : (
+            <Lock size={17} style={{ color: 'var(--amber)' }} />
+          )}
+        </button>
+
+        {/* Pinned */}
+        <button
+          type="button"
+          onClick={() => {
+            onSelectSection('library');
+            onSelectView('pinned');
+            onSelectCollection(null);
+            onSelectTag(null);
+          }}
+          title="Pinned Bookmarks"
+          style={{
+            width: '38px',
+            height: '38px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)',
+            background: activeSection === 'library' && viewFilter === 'pinned' ? 'var(--surface-hover)' : 'transparent',
+            color: activeSection === 'library' && viewFilter === 'pinned' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          <Pin size={17} style={{ color: 'var(--amber)' }} />
+        </button>
+
+        {/* Favorites */}
+        <button
+          type="button"
+          onClick={() => {
+            onSelectSection('library');
+            onSelectView('favorites');
+            onSelectCollection(null);
+            onSelectTag(null);
+          }}
+          title="Favorites"
+          style={{
+            width: '38px',
+            height: '38px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)',
+            background: activeSection === 'library' && viewFilter === 'favorites' ? 'var(--surface-hover)' : 'transparent',
+            color: activeSection === 'library' && viewFilter === 'favorites' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          <Star size={17} style={{ color: 'var(--rose)' }} />
+        </button>
+
+        {/* Archive */}
+        <button
+          type="button"
+          onClick={() => {
+            onSelectSection('library');
+            onSelectView('archived');
+            onSelectCollection(null);
+            onSelectTag(null);
+          }}
+          title="Archive"
+          style={{
+            width: '38px',
+            height: '38px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)',
+            background: activeSection === 'library' && viewFilter === 'archived' ? 'var(--surface-hover)' : 'transparent',
+            color: activeSection === 'library' && viewFilter === 'archived' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          <Archive size={17} style={{ color: 'var(--text-muted)' }} />
+        </button>
+
+        {/* Divider */}
+        {collections.length > 0 && (
+          <div style={{ width: '24px', height: '1px', background: 'var(--border)', margin: '8px 0' }} />
+        )}
+
+        {/* Collections (Dots) */}
+        {(collections || []).map((col) => {
+          const isSelected = selectedCollectionId === col.id && activeSection === 'library';
+          return (
+            <button
+              key={col.id}
+              type="button"
+              onClick={() => {
+                onSelectSection('library');
+                onSelectCollection(isSelected ? null : col.id);
+                onSelectTag(null);
+              }}
+              title={`Collection: ${col.name}`}
+              style={{
+                width: '34px',
+                height: '34px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-sm)',
+                background: isSelected ? 'var(--surface-hover)' : 'transparent',
+                cursor: 'pointer',
+              }}
+            >
+              <div
+                style={{
+                  width: isSelected ? '10px' : '8px',
+                  height: isSelected ? '10px' : '8px',
+                  borderRadius: '50%',
+                  background: col.color || 'var(--accent)',
+                  border: isSelected ? '2px solid var(--text-primary)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              />
+            </button>
+          );
+        })}
+
+        {/* Tags */}
+        {tags.length > 0 && (
+          <div style={{ width: '24px', height: '1px', background: 'var(--border)', margin: '8px 0' }} />
+        )}
+        {(tags || []).slice(0, 6).map((tag) => {
+          const isSelected = selectedTag === tag.name && activeSection === 'library';
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => {
+                onSelectSection('library');
+                onSelectTag(isSelected ? null : tag.name);
+                onSelectCollection(null);
+              }}
+              title={`Tag: #${tag.name}`}
+              style={{
+                width: '34px',
+                height: '26px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-sm)',
+                background: isSelected ? 'var(--accent)' : 'var(--surface)',
+                color: isSelected ? '#030712' : 'var(--text-muted)',
+                fontSize: '10px',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 600,
+                border: '1px solid var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              #{tag.name.slice(0, 2)}
+            </button>
+          );
+        })}
+
+        {/* Device Status Dot at bottom */}
+        <div
+          title={`Device: ${deviceId}`}
+          style={{
+            marginTop: 'auto',
+            paddingTop: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+          }}
+        >
+          <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--green)' }} />
+        </div>
+      </aside>
+    );
+  }
+
+  // Full Expanded Sidebar Mode
   return (
     <aside
       style={{
@@ -109,6 +359,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         overflowY: 'auto',
         padding: '16px 12px',
         userSelect: 'none',
+        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
       {/* Primary Navigation */}

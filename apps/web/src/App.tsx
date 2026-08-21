@@ -53,32 +53,31 @@ export const App: React.FC = () => {
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {isSidebarOpen && (
-          <Sidebar
-            viewFilter={store.viewFilter}
-            onSelectView={store.setViewFilter}
-            collections={store.collections}
-            selectedCollectionId={store.selectedCollectionId}
-            onSelectCollection={store.setSelectedCollectionId}
-            onAddCollection={store.addCollection}
-            onDeleteCollection={store.deleteCollection}
-            tags={store.tags}
-            selectedTag={store.selectedTag}
-            onSelectTag={store.setSelectedTag}
-            onAddTag={store.addTag}
-            onDeleteTag={store.deleteTag}
-            allBookmarksCount={store.allBookmarksCount}
-            vaultBookmarksCount={store.vaultBookmarksCount}
-            activeSection={store.activeSection}
-            onSelectSection={store.setActiveSection}
-            isVaultConfigured={store.vaultConfig.isConfigured}
-            isVaultUnlocked={store.isVaultUnlocked}
-            onOpenVaultPinModal={() => setIsVaultPinModalOpen(true)}
-            onOpenVaultSettingsModal={() => setIsVaultSettingsModalOpen(true)}
-            onLockVault={store.lockVault}
-            deviceId={store.deviceId}
-          />
-        )}
+        <Sidebar
+          isCollapsed={!isSidebarOpen}
+          viewFilter={store.viewFilter}
+          onSelectView={store.setViewFilter}
+          collections={store.collections}
+          selectedCollectionId={store.selectedCollectionId}
+          onSelectCollection={store.setSelectedCollectionId}
+          onAddCollection={store.addCollection}
+          onDeleteCollection={store.deleteCollection}
+          tags={store.tags}
+          selectedTag={store.selectedTag}
+          onSelectTag={store.setSelectedTag}
+          onAddTag={store.addTag}
+          onDeleteTag={store.deleteTag}
+          allBookmarksCount={store.allBookmarksCount}
+          vaultBookmarksCount={store.vaultBookmarksCount}
+          activeSection={store.activeSection}
+          onSelectSection={store.setActiveSection}
+          isVaultConfigured={store.vaultConfig.isConfigured}
+          isVaultUnlocked={store.isVaultUnlocked}
+          onOpenVaultPinModal={() => setIsVaultPinModalOpen(true)}
+          onOpenVaultSettingsModal={() => setIsVaultSettingsModalOpen(true)}
+          onLockVault={store.lockVault}
+          deviceId={store.deviceId}
+        />
 
         <main style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(100vh - 57px)' }}>
           {/* Vault locked hero state */}

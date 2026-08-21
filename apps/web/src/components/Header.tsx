@@ -93,37 +93,6 @@ export const Header: React.FC<HeaderProps> = ({
     >
       {/* Brand & Sidebar Toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {onToggleSidebar && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '32px',
-              height: '32px',
-              borderRadius: 'var(--radius-sm)',
-              background: isSidebarOpen ? 'var(--surface-hover)' : 'var(--surface)',
-              border: '1px solid var(--border)',
-              color: isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--text-primary)';
-              e.currentTarget.style.background = 'var(--surface-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)';
-              e.currentTarget.style.background = isSidebarOpen ? 'var(--surface-hover)' : 'var(--surface)';
-            }}
-          >
-            <PanelLeft size={16} />
-          </button>
-        )}
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
             style={{
@@ -144,6 +113,37 @@ export const Header: React.FC<HeaderProps> = ({
             Tessera
           </span>
         </div>
+
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            title={isSidebarOpen ? 'Collapse to compact sidebar' : 'Expand full sidebar'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '30px',
+              height: '30px',
+              borderRadius: 'var(--radius-sm)',
+              background: isSidebarOpen ? 'var(--surface-hover)' : 'transparent',
+              border: '1px solid var(--border)',
+              color: isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--surface-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)';
+              e.currentTarget.style.background = isSidebarOpen ? 'var(--surface-hover)' : 'transparent';
+            }}
+          >
+            <PanelLeft size={15} />
+          </button>
+        )}
       </div>
 
       {/* Center Search / Command Trigger */}
