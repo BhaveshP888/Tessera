@@ -5,104 +5,114 @@ import type {
   SyncDelta,
   Tag,
   UpdateBookmarkInput,
-  VaultConfig,
 } from '@tessera/schemas';
 import {
   base64ToUint8Array,
   generateMasterKey,
   uint8ArrayToBase64,
-  deriveRecordKey,
-} from '../crypto/keys.js';
-import { sealRecord, unsealRecord } from '../crypto/cipher.js';
+} from '../crypto/index.js';
 import { VaultSessionManager } from '../crypto/vault-session.js';
-import { incrementVectorClock } from '../sync/vector-clock.js';
-import { reconcileBookmark } from '../sync/lww.js';
 import {
-  pushEncryptedGistBackup,
   pullEncryptedGistBackup,
+  pushEncryptedGistBackup,
   type GistConfig,
-  type GistSyncResult,
 } from '../backup/gist-backup.js';
+import { MutationLog } from './mutation-log.js';
+import { RelayHttpTransport, type SyncTransport } from '../sync/transport.js';
+
+export type { GistConfig };
 
 export interface IStorageAdapter {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  clear(): void;
 }
 
 export class MemoryStorageAdapter implements IStorageAdapter {
   private store = new Map<string, string>();
 
-  public getItem(key: string): string | null {
-    return this.store.get(key) ?? null;
+  getItem(key: string): string | null {
+    return this.store.get(key) || null;
   }
-
-  public setItem(key: string, value: string): void {
+  setItem(key: string, value: string): void {
     this.store.set(key, value);
   }
-
-  public removeItem(key: string): void {
+  removeItem(key: string): void {
     this.store.delete(key);
+  }
+  clear(): void {
+    this.store.clear();
   }
 }
 
 export class BrowserLocalStorageAdapter implements IStorageAdapter {
-  public getItem(key: string): string | null {
-    if (typeof window === 'undefined' || !window.localStorage) return null;
-    return window.localStorage.getItem(key);
+  getItem(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
   }
-
-  public setItem(key: string, value: string): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    window.localStorage.setItem(key, value);
+  setItem(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
   }
-
-  public removeItem(key: string): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    window.localStorage.removeItem(key);
+  removeItem(key: string): void {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  }
+  clear(): void {
+    try {
+      localStorage.clear();
+    } catch {}
   }
 }
 
 export interface LocalStoreEngineOptions {
   storage?: IStorageAdapter;
   prefix?: string;
-  syncServerUrl?: string;
   deviceId?: string;
+  syncServerUrl?: string;
   fetchFn?: typeof fetch;
+  syncTransport?: SyncTransport;
 }
 
 export interface FullBackupPayload {
-  type: string;
   version: number;
   exportedAt: string;
-  masterKey: string;
+  deviceId: string;
+  masterKey?: string;
   bookmarks: Bookmark[];
-  tags: Tag[];
   collections: Collection[];
-  vaultConfig?: VaultConfig;
+  tags: Tag[];
+  tombstones: Record<string, string>;
 }
 
 /**
- * Deep storage and synchronization engine.
- * Encapsulates vector clocks, XChaCha record sealing, tombstone management,
- * delta queues, and remote relay synchronization behind a cohesive interface.
+ * LocalStoreEngine is the primary local storage and state management deep module.
+ * Delegates causality, cryptographic sealing, and conflict resolution to MutationLog,
+ * and delegates cloud networking to SyncTransport.
  */
 export class LocalStoreEngine {
   private storage: IStorageAdapter;
   private prefix: string;
-  private syncServerUrl: string;
   private deviceId: string;
-  private fetchFn: typeof fetch;
-
-  private masterKeyBase64: string;
+  private masterKeyBase64: string = '';
   private masterKey: Uint8Array;
+
   private bookmarks: Bookmark[] = [];
   private tags: Tag[] = [];
   private collections: Collection[] = [];
-  private deletedTombstones: Record<string, string> = {};
   private pendingDeltas: SyncDelta[] = [];
   private syncCursor = 0;
   private isSyncing = false;
+
+  private readonly mutationLog: MutationLog;
+  private readonly relayTransport: RelayHttpTransport;
+  private customTransport?: SyncTransport;
 
   private gistConfig: GistConfig = {
     token: '',
@@ -117,15 +127,16 @@ export class LocalStoreEngine {
   private subscribers = new Set<() => void>();
 
   constructor(options: LocalStoreEngineOptions = {}) {
-    this.storage = options.storage || (typeof window !== 'undefined' ? new BrowserLocalStorageAdapter() : new MemoryStorageAdapter());
+    this.storage =
+      options.storage ||
+      (typeof window !== 'undefined'
+        ? new BrowserLocalStorageAdapter()
+        : new MemoryStorageAdapter());
     this.prefix = options.prefix || 'tessera_v1_';
-    this.syncServerUrl = (options.syncServerUrl || 'http://127.0.0.1:8787').trim().replace(/\/+$/, '');
 
-    const boundDefaultFetch = typeof window !== 'undefined' && typeof window.fetch === 'function'
-      ? window.fetch.bind(window)
-      : (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : fetch);
-
-    this.fetchFn = options.fetchFn ? options.fetchFn : boundDefaultFetch;
+    const serverUrl = (options.syncServerUrl || 'http://127.0.0.1:8787').trim().replace(/\/+$/, '');
+    this.relayTransport = new RelayHttpTransport(serverUrl, options.fetchFn);
+    this.customTransport = options.syncTransport;
 
     // 1. Device ID
     const savedDeviceId = this.storage.getItem(`${this.prefix}deviceId`);
@@ -148,7 +159,9 @@ export class LocalStoreEngine {
       this.storage.setItem(`${this.prefix}masterKey`, this.masterKeyBase64);
     }
 
-    // 3. Load persisted entities
+    // 3. Load persisted entities & initialize MutationLog
+    const initialTombstones = this.safeJsonParse<Record<string, string>>('deletedTombstones', {});
+    this.mutationLog = new MutationLog(initialTombstones);
     this.loadPersistedState();
   }
 
@@ -166,12 +179,12 @@ export class LocalStoreEngine {
     this.bookmarks = Array.isArray(rawBookmarks)
       ? rawBookmarks.map((b) => ({
           ...b,
-          versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
+          versionClock:
+            b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
         }))
       : [];
     this.tags = this.safeJsonParse<Tag[]>('tags', []);
     this.collections = this.safeJsonParse<Collection[]>('collections', []);
-    this.deletedTombstones = this.safeJsonParse<Record<string, string>>('deletedTombstones', {});
     this.pendingDeltas = this.safeJsonParse<SyncDelta[]>('pendingDeltas', []);
     this.gistConfig = this.safeJsonParse<GistConfig>('gistConfig', {
       token: '',
@@ -200,16 +213,17 @@ export class LocalStoreEngine {
   }
 
   // --- Getters ---
+
   public getDeviceId(): string {
     return this.deviceId;
   }
 
-  public getMasterKeyBase64(): string {
-    return this.masterKeyBase64;
-  }
-
   public getBookmarks(): Bookmark[] {
     return [...this.bookmarks];
+  }
+
+  public getBookmark(id: string): Bookmark | null {
+    return this.bookmarks.find((b) => b.id === id) || null;
   }
 
   public getTags(): Tag[] {
@@ -224,29 +238,26 @@ export class LocalStoreEngine {
     return this.pendingDeltas.length;
   }
 
-  public getIsSyncing(): boolean {
-    return this.isSyncing;
+  public getSyncCursor(): number {
+    return this.syncCursor;
   }
 
   public getSyncServerUrl(): string {
-    return this.syncServerUrl;
+    return this.relayTransport.getServerUrl();
   }
 
   public setSyncServerUrl(url: string): void {
-    this.syncServerUrl = url;
-    this.notify();
+    this.relayTransport.setServerUrl(url);
   }
 
-  // --- Mutations ---
+  // --- Mutation Operations ---
 
   public addBookmark(input: CreateBookmarkInput): Bookmark {
-    const id = `b-${crypto.randomUUID()}`;
-    const now = new Date().toISOString();
-    const updatedClock = incrementVectorClock({}, this.deviceId);
+    const id = (input as any).id || crypto.randomUUID();
     const isVaultItem = Boolean(input.isVault);
 
-    let normalizedUrl = input.url.trim();
-    if (!/^https?:\/\//i.test(normalizedUrl)) {
+    let normalizedUrl = (input.url || '').trim();
+    if (normalizedUrl && !/^https?:\/\//i.test(normalizedUrl)) {
       normalizedUrl = `https://${normalizedUrl}`;
     }
 
@@ -255,12 +266,6 @@ export class LocalStoreEngine {
       hostname = new URL(normalizedUrl).hostname;
     } catch {
       hostname = normalizedUrl;
-    }
-
-    // Clear prior tombstone if reusing ID
-    if (this.deletedTombstones[id]) {
-      delete this.deletedTombstones[id];
-      this.persist('deletedTombstones', this.deletedTombstones);
     }
 
     const bookmark: Bookmark = {
@@ -277,10 +282,10 @@ export class LocalStoreEngine {
       isArchived: input.isArchived || false,
       isFavorite: input.isFavorite || false,
       isPinned: input.isPinned || false,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       deletedAt: null,
-      versionClock: updatedClock,
+      versionClock: {},
     };
 
     // Auto-register any new tags
@@ -293,35 +298,27 @@ export class LocalStoreEngine {
       }
     }
 
-    // Seal delta
-    const key = isVaultItem && this.vaultSession.isUnlocked()
-      ? this.vaultSession.getVaultMasterKey()!
-      : this.masterKey;
+    const key =
+      isVaultItem && this.vaultSession.isUnlocked()
+        ? this.vaultSession.getVaultMasterKey()!
+        : this.masterKey;
 
-    const recordKey = deriveRecordKey(key, id);
-    const sealed = sealRecord(recordKey, bookmark);
-
-    const delta: SyncDelta = {
-      id: crypto.randomUUID(),
-      entityType: 'bookmark',
-      entityId: id,
+    const { delta, updatedBookmark } = this.mutationLog.recordBookmarkMutation({
+      bookmark,
+      key,
       deviceId: this.deviceId,
-      lamportTs: updatedClock[this.deviceId] || 1,
-      vectorClock: updatedClock,
-      ciphertext: sealed.ciphertext,
-      nonce: sealed.nonce,
-      createdAt: now,
-    };
+    });
 
     this.pendingDeltas.push(delta);
-    this.bookmarks = [bookmark, ...this.bookmarks];
+    this.bookmarks = [updatedBookmark, ...this.bookmarks];
 
     this.persist('bookmarks', this.bookmarks);
     this.persist('pendingDeltas', this.pendingDeltas);
+    this.persist('deletedTombstones', this.mutationLog.getTombstones());
     this.notify();
     this.triggerGistAutoBackup();
 
-    return bookmark;
+    return updatedBookmark;
   }
 
   public updateBookmark(id: string, input: UpdateBookmarkInput): Bookmark | null {
@@ -329,8 +326,6 @@ export class LocalStoreEngine {
     if (existingIndex < 0) return null;
 
     const existing = this.bookmarks[existingIndex]!;
-    const now = new Date().toISOString();
-    const clock = incrementVectorClock(existing.versionClock, this.deviceId);
 
     // Auto-register any new tags
     if (Array.isArray(input.tags)) {
@@ -345,49 +340,32 @@ export class LocalStoreEngine {
     const updated: Bookmark = {
       ...existing,
       ...input,
-      updatedAt: now,
-      versionClock: clock,
     };
 
-    this.bookmarks = [
-      ...this.bookmarks.slice(0, existingIndex),
-      updated,
-      ...this.bookmarks.slice(existingIndex + 1),
-    ];
-
-    this.persist('bookmarks', this.bookmarks);
-
-    try {
-      const key = updated.isVault && this.vaultSession.isUnlocked()
+    const key =
+      updated.isVault && this.vaultSession.isUnlocked()
         ? this.vaultSession.getVaultMasterKey()!
         : this.masterKey;
 
-      if (key) {
-        const recordKey = deriveRecordKey(key, id);
-        const sealed = sealRecord(recordKey, updated);
+    const { delta, updatedBookmark } = this.mutationLog.recordBookmarkMutation({
+      bookmark: updated,
+      key,
+      deviceId: this.deviceId,
+    });
 
-        const delta: SyncDelta = {
-          id: crypto.randomUUID(),
-          entityType: 'bookmark',
-          entityId: id,
-          deviceId: this.deviceId,
-          lamportTs: clock[this.deviceId] || 1,
-          vectorClock: clock,
-          ciphertext: sealed.ciphertext,
-          nonce: sealed.nonce,
-          createdAt: now,
-        };
+    this.bookmarks = [
+      ...this.bookmarks.slice(0, existingIndex),
+      updatedBookmark,
+      ...this.bookmarks.slice(existingIndex + 1),
+    ];
 
-        this.pendingDeltas.push(delta);
-        this.persist('pendingDeltas', this.pendingDeltas);
-      }
-    } catch (err) {
-      console.warn('[LocalStoreEngine] Delta sealing skipped:', err);
-    }
-
+    this.pendingDeltas.push(delta);
+    this.persist('bookmarks', this.bookmarks);
+    this.persist('pendingDeltas', this.pendingDeltas);
     this.notify();
     this.triggerGistAutoBackup();
-    return updated;
+
+    return updatedBookmark;
   }
 
   public deleteBookmark(id: string): boolean {
@@ -395,45 +373,27 @@ export class LocalStoreEngine {
     if (existingIndex < 0) return false;
 
     const b = this.bookmarks[existingIndex]!;
-    const now = new Date().toISOString();
-    const clock = incrementVectorClock(b.versionClock, this.deviceId);
-
-    this.deletedTombstones[id] = now;
-    this.persist('deletedTombstones', this.deletedTombstones);
-
-    this.bookmarks = this.bookmarks.filter((item) => item.id !== id);
-    this.persist('bookmarks', this.bookmarks);
-
-    try {
-      const key = b.isVault && this.vaultSession.isUnlocked()
+    const key =
+      b.isVault && this.vaultSession.isUnlocked()
         ? this.vaultSession.getVaultMasterKey()!
         : this.masterKey;
 
-      if (key) {
-        const recordKey = deriveRecordKey(key, id);
-        const sealed = sealRecord(recordKey, { ...b, deletedAt: now, updatedAt: now });
+    const { delta } = this.mutationLog.recordBookmarkMutation({
+      bookmark: b,
+      key,
+      deviceId: this.deviceId,
+      isDeleted: true,
+    });
 
-        const delta: SyncDelta = {
-          id: crypto.randomUUID(),
-          entityType: 'tombstone',
-          entityId: id,
-          deviceId: this.deviceId,
-          lamportTs: clock[this.deviceId] || 1,
-          vectorClock: clock,
-          ciphertext: sealed.ciphertext,
-          nonce: sealed.nonce,
-          createdAt: now,
-        };
+    this.bookmarks = this.bookmarks.filter((item) => item.id !== id);
+    this.pendingDeltas.push(delta);
 
-        this.pendingDeltas.push(delta);
-        this.persist('pendingDeltas', this.pendingDeltas);
-      }
-    } catch (err) {
-      console.warn('[LocalStoreEngine] Delete tombstone sealing skipped:', err);
-    }
-
+    this.persist('bookmarks', this.bookmarks);
+    this.persist('pendingDeltas', this.pendingDeltas);
+    this.persist('deletedTombstones', this.mutationLog.getTombstones());
     this.notify();
     this.triggerGistAutoBackup();
+
     return true;
   }
 
@@ -456,125 +416,102 @@ export class LocalStoreEngine {
     return newTag;
   }
 
-  public deleteTag(nameOrId: string): boolean {
-    const target = nameOrId.trim().toLowerCase();
+  public deleteTag(target: string): boolean {
     const initialLen = this.tags.length;
-    this.tags = this.tags.filter((t) => t.id !== target && t.name.toLowerCase() !== target);
+    this.tags = this.tags.filter((t) => t.id !== target && t.name.toLowerCase() !== target.toLowerCase());
     if (this.tags.length === initialLen) return false;
 
-    // Remove tag from bookmarks
-    let modified = false;
     this.bookmarks = this.bookmarks.map((b) => {
-      if ((b.tags || []).includes(target)) {
-        modified = true;
+      if (b.tags.includes(target)) {
         return {
           ...b,
-          tags: (b.tags || []).filter((t) => t.toLowerCase() !== target),
+          tags: b.tags.filter((t) => t !== target && t.toLowerCase() !== target.toLowerCase()),
         };
       }
       return b;
     });
 
+    this.persist('bookmarks', this.bookmarks);
     this.persist('tags', this.tags);
-    if (modified) this.persist('bookmarks', this.bookmarks);
     this.notify();
     return true;
   }
 
-  public addCollection(name: string, color = '#1e3a5f', description = ''): Collection {
+  public addCollection(name: string, color = '#1e3a5f', parentId: string | null = null): Collection {
     const trimmed = name.trim();
+    const existing = this.collections.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing;
+
     const newCol: Collection = {
       id: `c-${crypto.randomUUID().slice(0, 8)}`,
       name: trimmed,
-      description,
       color,
-      parentId: null,
+      parentId,
       sortOrder: this.collections.length,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     this.collections.push(newCol);
+
+    const delta = this.mutationLog.recordCollectionMutation({
+      collection: newCol,
+      masterKey: this.masterKey,
+      deviceId: this.deviceId,
+    });
+
+    this.pendingDeltas.push(delta);
     this.persist('collections', this.collections);
-
-    try {
-      const colKey = deriveRecordKey(this.masterKey, newCol.id);
-      const colSealed = sealRecord(colKey, newCol);
-      const delta: SyncDelta = {
-        id: crypto.randomUUID(),
-        entityType: 'collection',
-        entityId: newCol.id,
-        deviceId: this.deviceId,
-        lamportTs: 1,
-        vectorClock: { [this.deviceId]: 1 },
-        ciphertext: colSealed.ciphertext,
-        nonce: colSealed.nonce,
-        createdAt: newCol.createdAt,
-      };
-      this.pendingDeltas.push(delta);
-      this.persist('pendingDeltas', this.pendingDeltas);
-    } catch (err) {
-      console.warn('[LocalStoreEngine] Collection delta sealing failed:', err);
-    }
-
+    this.persist('pendingDeltas', this.pendingDeltas);
     this.notify();
     this.triggerGistAutoBackup();
 
     setTimeout(() => {
-      this.sync(false);
+      this.sync().catch(() => {});
     }, 50);
 
     return newCol;
   }
 
   public deleteCollection(id: string): boolean {
-    const existing = this.collections.find((c) => c.id === id);
-    if (!existing) return false;
+    const col = this.collections.find((c) => c.id === id);
+    if (!col) return false;
 
     this.collections = this.collections.filter((c) => c.id !== id);
 
-    // Detach deleted collection from bookmarks
-    let modified = false;
     this.bookmarks = this.bookmarks.map((b) => {
       if (b.collectionId === id) {
-        modified = true;
         return { ...b, collectionId: null };
       }
       return b;
     });
 
+    const delta = this.mutationLog.recordCollectionMutation({
+      collection: col,
+      masterKey: this.masterKey,
+      deviceId: this.deviceId,
+      isDeleted: true,
+    });
+
+    this.pendingDeltas.push(delta);
     this.persist('collections', this.collections);
-    if (modified) this.persist('bookmarks', this.bookmarks);
-
-    try {
-      const colKey = deriveRecordKey(this.masterKey, id);
-      const now = new Date().toISOString();
-      const colSealed = sealRecord(colKey, { ...existing, deletedAt: now });
-      const delta: SyncDelta = {
-        id: crypto.randomUUID(),
-        entityType: 'tombstone',
-        entityId: id,
-        deviceId: this.deviceId,
-        lamportTs: 1,
-        vectorClock: { [this.deviceId]: 1 },
-        ciphertext: colSealed.ciphertext,
-        nonce: colSealed.nonce,
-        createdAt: now,
-      };
-      this.pendingDeltas.push(delta);
-      this.persist('pendingDeltas', this.pendingDeltas);
-    } catch (err) {
-      console.warn('[LocalStoreEngine] Collection tombstone delta failed:', err);
-    }
-
+    this.persist('bookmarks', this.bookmarks);
+    this.persist('pendingDeltas', this.pendingDeltas);
+    this.persist('deletedTombstones', this.mutationLog.getTombstones());
     this.notify();
     this.triggerGistAutoBackup();
 
     setTimeout(() => {
-      this.sync(false);
+      this.sync().catch(() => {});
     }, 50);
 
     return true;
+  }
+
+  // --- Key Management ---
+
+  public getMasterKeyBase64(): string {
+    return this.masterKeyBase64;
   }
 
   public setMasterKey(b64: string): { success: boolean; error?: string } {
@@ -595,7 +532,7 @@ export class LocalStoreEngine {
     }
   }
 
-  // --- Synchronization ---
+  // --- Synchronization via SyncTransport Seam ---
 
   public async sync(forceFullPush = false): Promise<{
     success: boolean;
@@ -609,66 +546,48 @@ export class LocalStoreEngine {
 
     let pushedCount = 0;
     let pulledCount = 0;
+    const transport = this.customTransport || this.relayTransport;
 
     try {
       let deltasToPush = [...this.pendingDeltas];
 
       // Full push: package all local non-deleted bookmarks and collections
       if (forceFullPush && (this.bookmarks.length > 0 || this.collections.length > 0)) {
-        const now = new Date().toISOString();
         deltasToPush = [...this.pendingDeltas];
         for (const b of this.bookmarks) {
-          if (b.deletedAt || this.deletedTombstones[b.id]) continue;
-          const key = b.isVault && this.vaultSession.isUnlocked()
-            ? this.vaultSession.getVaultMasterKey()!
-            : this.masterKey;
+          if (b.deletedAt || this.mutationLog.isDeleted(b.id)) continue;
+          const key =
+            b.isVault && this.vaultSession.isUnlocked()
+              ? this.vaultSession.getVaultMasterKey()!
+              : this.masterKey;
 
-          const recordKey = deriveRecordKey(key, b.id);
-          const sealed = sealRecord(recordKey, b);
-
-          deltasToPush.push({
-            id: crypto.randomUUID(),
-            entityType: 'bookmark',
-            entityId: b.id,
+          const { delta } = this.mutationLog.recordBookmarkMutation({
+            bookmark: b,
+            key,
             deviceId: this.deviceId,
-            lamportTs: b.versionClock?.[this.deviceId] || 1,
-            vectorClock: b.versionClock || { [this.deviceId]: 1 },
-            ciphertext: sealed.ciphertext,
-            nonce: sealed.nonce,
-            createdAt: b.updatedAt || now,
           });
+          deltasToPush.push(delta);
         }
 
         for (const col of this.collections) {
-          const colKey = deriveRecordKey(this.masterKey, col.id);
-          const colSealed = sealRecord(colKey, col);
-          deltasToPush.push({
-            id: crypto.randomUUID(),
-            entityType: 'collection',
-            entityId: col.id,
+          const delta = this.mutationLog.recordCollectionMutation({
+            collection: col,
+            masterKey: this.masterKey,
             deviceId: this.deviceId,
-            lamportTs: 1,
-            vectorClock: { [this.deviceId]: 1 },
-            ciphertext: colSealed.ciphertext,
-            nonce: colSealed.nonce,
-            createdAt: col.createdAt || now,
           });
+          deltasToPush.push(delta);
         }
       }
 
       // 1. Push
       if (deltasToPush.length > 0) {
-        const pushRes = await this.fetchFn(`${this.syncServerUrl}/api/sync/push`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            deviceId: this.deviceId,
-            deltas: deltasToPush,
-            clientCursor: this.syncCursor,
-          }),
+        const pushRes = await transport.push({
+          deviceId: this.deviceId,
+          clientCursor: this.syncCursor,
+          deltas: deltasToPush,
         });
 
-        if (pushRes.ok) {
+        if (pushRes.success) {
           pushedCount = deltasToPush.length;
           this.pendingDeltas = [];
           this.persist('pendingDeltas', this.pendingDeltas);
@@ -676,225 +595,142 @@ export class LocalStoreEngine {
       }
 
       // 2. Pull
-      const pullRes = await this.fetchFn(`${this.syncServerUrl}/api/sync/pull`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deviceId: this.deviceId,
-          sinceCursor: this.syncCursor,
-          limit: 200,
-        }),
+      const pullRes = await transport.pull({
+        deviceId: this.deviceId,
+        sinceCursor: this.syncCursor,
+        limit: 200,
       });
 
-      if (pullRes.ok) {
-        const data = (await pullRes.json()) as {
-          deltas: SyncDelta[];
-          nextCursor: number;
-          hasMore: boolean;
-        };
+      if (pullRes.success && pullRes.deltas.length > 0) {
+        const result = this.mutationLog.reconcileRemoteDeltas({
+          deltas: pullRes.deltas,
+          localBookmarks: this.bookmarks,
+          localCollections: this.collections,
+          localTags: this.tags,
+          masterKey: this.masterKey,
+          vaultMasterKey: this.vaultSession.isUnlocked()
+            ? this.vaultSession.getVaultMasterKey()!
+            : null,
+          deviceId: this.deviceId,
+        });
 
-        if (data.deltas.length > 0) {
-          for (const delta of data.deltas) {
-            if (delta.deviceId === this.deviceId) continue;
+        this.bookmarks = result.updatedBookmarks;
+        this.collections = result.updatedCollections;
+        this.tags = result.updatedTags;
+        pulledCount = result.pulledCount;
+        this.syncCursor = pullRes.nextCursor;
 
-            // Handle Collection entity deltas
-            if (delta.entityType === 'collection' || (delta.entityType === 'tombstone' && delta.entityId.startsWith('c-'))) {
-              const colRecordKey = deriveRecordKey(this.masterKey, delta.entityId);
-              const unsealedCol = unsealRecord<Collection>(colRecordKey, delta.ciphertext, delta.nonce);
-              if (unsealedCol.data) {
-                const incomingCol = unsealedCol.data;
-                const isDeleted = delta.entityType === 'tombstone' || Boolean((incomingCol as any).deletedAt);
-
-                if (isDeleted) {
-                  this.collections = this.collections.filter(
-                    (c) => c.id !== delta.entityId && c.name.toLowerCase() !== incomingCol.name?.toLowerCase(),
-                  );
-                } else {
-                  pulledCount++;
-                  const existingIdx = this.collections.findIndex(
-                    (c) => c.id === incomingCol.id || c.name.toLowerCase() === incomingCol.name.toLowerCase(),
-                  );
-                  if (existingIdx >= 0) {
-                    this.collections[existingIdx] = incomingCol;
-                  } else {
-                    this.collections = [...this.collections, incomingCol];
-                  }
-                }
-                this.persist('collections', this.collections);
-              }
-              continue;
-            }
-
-            // 1. Try Master Key for Bookmarks
-            const recordKey = deriveRecordKey(this.masterKey, delta.entityId);
-            let unsealed = unsealRecord<Bookmark>(recordKey, delta.ciphertext, delta.nonce);
-
-            // 2. If Master Key failed, try Vault Master Key
-            if (!unsealed.data && this.vaultSession.isUnlocked()) {
-              const vKey = this.vaultSession.getVaultMasterKey()!;
-              const vRecordKey = deriveRecordKey(vKey, delta.entityId);
-              unsealed = unsealRecord<Bookmark>(vRecordKey, delta.ciphertext, delta.nonce);
-            }
-
-            if (unsealed.data) {
-              const incoming = unsealed.data;
-              const isDeleted = delta.entityType === 'tombstone' || Boolean(incoming.deletedAt);
-              const tombstoneTime = this.deletedTombstones[delta.entityId];
-
-              if (isDeleted) {
-                const delTime = incoming.deletedAt || delta.createdAt || new Date().toISOString();
-                this.deletedTombstones[delta.entityId] = delTime;
-                this.bookmarks = this.bookmarks.filter((b) => b.id !== delta.entityId);
-                pulledCount++;
-              } else {
-                if (tombstoneTime) {
-                  const incTime = new Date(incoming.updatedAt || delta.createdAt).getTime();
-                  const delTime = new Date(tombstoneTime).getTime();
-                  if (incTime <= delTime) continue;
-                }
-
-                // Map incoming collection name/ID to registered collection
-                const candidateCol = incoming.collectionId || (incoming as any).collection;
-                if (candidateCol) {
-                  let matchingCol = this.collections.find(
-                    (c) => c.id === candidateCol || c.name.toLowerCase() === candidateCol.toLowerCase(),
-                  );
-                  if (!matchingCol && candidateCol.length > 0 && !candidateCol.startsWith('c-')) {
-                    matchingCol = this.addCollection(candidateCol);
-                  }
-                  incoming.collectionId = matchingCol ? matchingCol.id : (candidateCol.startsWith('c-') ? candidateCol : null);
-                }
-
-                // Auto-register any new tags
-                if (Array.isArray(incoming.tags)) {
-                  for (const t of incoming.tags) {
-                    const clean = t.trim().toLowerCase();
-                    if (clean && !this.tags.some((x) => x.name.toLowerCase() === clean)) {
-                      this.addTag(clean);
-                    }
-                  }
-                }
-
-                pulledCount++;
-                const existingIndex = this.bookmarks.findIndex((b) => b.id === incoming.id);
-                if (existingIndex >= 0) {
-                  const reconciled = reconcileBookmark(
-                    this.bookmarks[existingIndex]!,
-                    incoming,
-                    this.deviceId,
-                    delta.deviceId,
-                    delta.lamportTs,
-                  );
-                  this.bookmarks[existingIndex] = reconciled;
-                } else {
-                  this.bookmarks = [incoming, ...this.bookmarks];
-                }
-              }
-            }
-          }
-
-          this.syncCursor = data.nextCursor;
-          this.persist('bookmarks', this.bookmarks);
-          this.persist('deletedTombstones', this.deletedTombstones);
-          this.persist('collections', this.collections);
-        }
+        this.persist('bookmarks', this.bookmarks);
+        this.persist('collections', this.collections);
+        this.persist('tags', this.tags);
+        this.persist('deletedTombstones', this.mutationLog.getTombstones());
       }
 
-      return { success: true, pulledCount, pushedCount };
-    } catch (err) {
-      return { success: false, pulledCount, pushedCount, error: (err as Error).message };
-    } finally {
       this.isSyncing = false;
       this.notify();
-    }
-  }
-
-  // --- Backup & Restore ---
-
-  public exportBackup(): FullBackupPayload {
-    return {
-      type: 'tessera_full_backup',
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      masterKey: this.masterKeyBase64,
-      bookmarks: this.bookmarks,
-      tags: this.tags,
-      collections: this.collections,
-    };
-  }
-
-  public async restoreBackup(backupData: any): Promise<{ success: boolean; count?: number; error?: string }> {
-    try {
-      const payload: FullBackupPayload = typeof backupData === 'string' ? JSON.parse(backupData) : backupData;
-
-      if (payload.masterKey && payload.masterKey.trim()) {
-        this.setMasterKey(payload.masterKey);
-      }
-
-      let count = 0;
-      if (Array.isArray(payload.bookmarks)) {
-        const sanitizedIncoming = payload.bookmarks.map((b) => ({
-          ...b,
-          versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
-        }));
-        const merged = [...sanitizedIncoming];
-        for (const item of this.bookmarks) {
-          if (!merged.some((m) => m.id === item.id)) {
-            merged.push(item);
-          }
-        }
-        this.bookmarks = merged;
-        count = payload.bookmarks.length;
-        this.persist('bookmarks', this.bookmarks);
-      }
-
-      if (Array.isArray(payload.tags)) {
-        const merged = [...payload.tags];
-        for (const t of this.tags) {
-          if (!merged.some((m) => m.id === t.id)) {
-            merged.push(t);
-          }
-        }
-        this.tags = merged;
-        this.persist('tags', this.tags);
-      }
-
-      if (Array.isArray(payload.collections)) {
-        const merged = [...payload.collections];
-        for (const c of this.collections) {
-          if (!merged.some((m) => m.id === c.id)) {
-            merged.push(c);
-          }
-        }
-        this.collections = merged;
-        this.persist('collections', this.collections);
-      }
-
-      this.syncCursor = 0;
-      this.notify();
-
-      // Trigger automatic sync push
-      setTimeout(() => {
-        this.sync(true);
-      }, 50);
-
-      return { success: true, count };
+      return { success: true, pulledCount, pushedCount };
     } catch (err) {
-      return { success: false, error: (err as Error).message };
+      this.isSyncing = false;
+      this.notify();
+      return {
+        success: false,
+        pulledCount: 0,
+        pushedCount: 0,
+        error: (err as Error).message,
+      };
     }
   }
 
-  // --- GitHub Gist Zero-Knowledge Cloud Backup ---
+  // --- GitHub Gist Backup & Restore ---
 
   public getGistConfig(): GistConfig {
     return { ...this.gistConfig };
   }
 
-  public setGistConfig(updates: Partial<GistConfig>): GistConfig {
-    this.gistConfig = { ...this.gistConfig, ...updates };
+  public setGistConfig(config: Partial<GistConfig>): void {
+    this.gistConfig = { ...this.gistConfig, ...config };
     this.persist('gistConfig', this.gistConfig);
     this.notify();
-    return { ...this.gistConfig };
+  }
+
+  public async backupToGist(): Promise<{
+    success: boolean;
+    gistId?: string;
+    error?: string;
+  }> {
+    if (!this.gistConfig.token.trim()) {
+      return { success: false, error: 'GitHub Personal Access Token is required' };
+    }
+
+    try {
+      const payload: FullBackupPayload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        deviceId: this.deviceId,
+        bookmarks: this.bookmarks,
+        collections: this.collections,
+        tags: this.tags,
+        tombstones: this.mutationLog.getTombstones(),
+      };
+
+      const result = await pushEncryptedGistBackup(
+        this.gistConfig.token,
+        this.gistConfig.gistId,
+        payload,
+        this.masterKey,
+      );
+
+      if (result.success) {
+        this.setGistConfig({
+          gistId: result.gistId || this.gistConfig.gistId,
+          lastSyncAt: new Date().toISOString(),
+          lastError: null,
+        });
+      } else {
+        this.setGistConfig({ lastError: result.error || 'Backup failed' });
+      }
+
+      return result;
+    } catch (err) {
+      const errMsg = (err as Error).message;
+      this.setGistConfig({ lastError: errMsg });
+      return { success: false, error: errMsg };
+    }
+  }
+
+  public async restoreFromGist(targetGistId?: string): Promise<{
+    success: boolean;
+    restoredCount?: number;
+    error?: string;
+  }> {
+    const gistIdToUse = targetGistId || this.gistConfig.gistId;
+    if (!this.gistConfig.token.trim() || !gistIdToUse) {
+      return { success: false, error: 'GitHub Token and Gist ID are required' };
+    }
+
+    try {
+      const result = await pullEncryptedGistBackup(
+        this.gistConfig.token,
+        gistIdToUse,
+        this.masterKey,
+      );
+
+      if (!result.success || !result.payload) {
+        return { success: false, error: result.error || 'Failed to pull Gist backup' };
+      }
+
+      const res = this.restoreFromPayload(result.payload);
+      if (res.success) {
+        this.setGistConfig({
+          gistId: gistIdToUse,
+          lastSyncAt: new Date().toISOString(),
+          lastError: null,
+        });
+      }
+      return res;
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
   }
 
   public triggerGistAutoBackup(): void {
@@ -911,63 +747,95 @@ export class LocalStoreEngine {
     }, 2500);
   }
 
-  public async backupToGist(): Promise<GistSyncResult> {
-    if (!this.gistConfig.token.trim()) {
-      return { success: false, error: 'No GitHub Personal Access Token configured.' };
-    }
+  // --- Full Backup Payload Export & Restore ---
 
-    const payload = this.exportBackup();
-    const res = await pushEncryptedGistBackup(
-      this.gistConfig.token,
-      this.gistConfig.gistId,
-      payload,
-      this.masterKey,
-      this.fetchFn,
-    );
-
-    if (res.success && res.gistId) {
-      this.setGistConfig({
-        gistId: res.gistId,
-        lastSyncAt: res.updatedAt || new Date().toISOString(),
-        lastError: null,
-      });
-    } else if (res.error) {
-      this.setGistConfig({
-        lastError: res.error,
-      });
-    }
-
-    return res;
+  public exportBackup(): FullBackupPayload {
+    return this.exportFullBackupPayload();
   }
 
-  public async restoreFromGist(gistId?: string): Promise<{ success: boolean; count?: number; error?: string }> {
-    const targetGistId = (gistId || this.gistConfig.gistId || '').trim();
-    if (!this.gistConfig.token.trim()) {
-      return { success: false, error: 'No GitHub Personal Access Token configured.' };
+  public restoreBackup(payload: FullBackupPayload): {
+    success: boolean;
+    restoredCount: number;
+    error?: string;
+  } {
+    return this.restoreFromPayload(payload);
+  }
+
+  public exportFullBackupPayload(): FullBackupPayload {
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      deviceId: this.deviceId,
+      masterKey: this.masterKeyBase64,
+      bookmarks: this.bookmarks,
+      collections: this.collections,
+      tags: this.tags,
+      tombstones: this.mutationLog.getTombstones(),
+    };
+  }
+
+  public restoreFromPayload(payload: FullBackupPayload): {
+    success: boolean;
+    restoredCount: number;
+    error?: string;
+  } {
+    try {
+      if (!payload || typeof payload !== 'object') {
+        throw new Error('Invalid backup payload format');
+      }
+
+      if (payload.masterKey) {
+        this.setMasterKey(payload.masterKey);
+      }
+
+      const incomingBookmarks = Array.isArray(payload.bookmarks) ? payload.bookmarks : [];
+      const incomingCollections = Array.isArray(payload.collections) ? payload.collections : [];
+      const incomingTags = Array.isArray(payload.tags) ? payload.tags : [];
+      const incomingTombstones =
+        payload.tombstones && typeof payload.tombstones === 'object' ? payload.tombstones : {};
+
+      // Merge collections
+      for (const col of incomingCollections) {
+        const existingIdx = this.collections.findIndex((c) => c.id === col.id);
+        if (existingIdx >= 0) {
+          this.collections[existingIdx] = col;
+        } else {
+          this.collections.push(col);
+        }
+      }
+
+      // Merge tags
+      for (const t of incomingTags) {
+        if (!this.tags.some((x) => x.name.toLowerCase() === t.name.toLowerCase())) {
+          this.tags.push(t);
+        }
+      }
+
+      // Merge tombstones
+      const mergedTombstones = { ...this.mutationLog.getTombstones(), ...incomingTombstones };
+      this.mutationLog.setTombstones(mergedTombstones);
+
+      // Merge bookmarks
+      for (const b of incomingBookmarks) {
+        if (this.mutationLog.isDeleted(b.id, b.updatedAt)) continue;
+
+        const existingIdx = this.bookmarks.findIndex((x) => x.id === b.id);
+        if (existingIdx >= 0) {
+          this.bookmarks[existingIdx] = b;
+        } else {
+          this.bookmarks.push(b);
+        }
+      }
+
+      this.persist('bookmarks', this.bookmarks);
+      this.persist('collections', this.collections);
+      this.persist('tags', this.tags);
+      this.persist('deletedTombstones', this.mutationLog.getTombstones());
+
+      this.notify();
+      return { success: true, restoredCount: incomingBookmarks.length };
+    } catch (err) {
+      return { success: false, restoredCount: 0, error: (err as Error).message };
     }
-    if (!targetGistId) {
-      return { success: false, error: 'No Gist ID provided.' };
-    }
-
-    const res = await pullEncryptedGistBackup(
-      this.gistConfig.token,
-      targetGistId,
-      this.masterKey,
-      this.fetchFn,
-    );
-
-    if (!res.success || !res.payload) {
-      const errMessage = res.error || 'Failed to pull backup from GitHub Gist.';
-      this.setGistConfig({ lastError: errMessage });
-      return { success: false, error: errMessage };
-    }
-
-    this.setGistConfig({
-      gistId: targetGistId,
-      lastSyncAt: new Date().toISOString(),
-      lastError: null,
-    });
-
-    return this.restoreBackup(res.payload);
   }
 }
