@@ -138,12 +138,22 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
 
           {/* Quick Actions (Hover) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: isHovered ? 1 : 0.35, transition: 'opacity 0.15s ease' }}>
-            <button onClick={handleCopy} title="Copy URL" style={{ padding: '4px', color: copied ? 'var(--green)' : 'var(--text-muted)' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCopy();
+              }}
+              title="Copy URL"
+              style={{ padding: '4px', color: copied ? 'var(--green)' : 'var(--text-muted)' }}
+            >
               {copied ? <Check size={13} /> : <Copy size={13} />}
             </button>
             {onEdit && (
               <button
-                onClick={() => onEdit(bookmark)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(bookmark);
+                }}
                 title="Edit Bookmark"
                 style={{ padding: '4px', color: 'var(--text-muted)' }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
@@ -152,10 +162,24 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
                 <Pencil size={13} />
               </button>
             )}
-            <button onClick={() => onToggleFavorite(bookmark.id)} title="Favorite" style={{ padding: '4px', color: bookmark.isFavorite ? 'var(--rose)' : 'var(--text-muted)' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(bookmark.id);
+              }}
+              title="Favorite"
+              style={{ padding: '4px', color: bookmark.isFavorite ? 'var(--rose)' : 'var(--text-muted)' }}
+            >
               <Star size={13} fill={bookmark.isFavorite ? 'var(--rose)' : 'none'} />
             </button>
-            <button onClick={() => onDelete(bookmark.id)} title="Delete" style={{ padding: '4px', color: 'var(--text-muted)' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(bookmark.id);
+              }}
+              title="Delete"
+              style={{ padding: '4px', color: 'var(--text-muted)' }}
+            >
               <Trash2 size={13} />
             </button>
           </div>
@@ -217,7 +241,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
         {/* Action icons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1px', opacity: isHovered ? 1 : 0.6, transition: 'opacity 0.15s ease' }}>
           <button
-            onClick={handleCopy}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCopy(e);
+            }}
             title="Copy URL"
             style={{
               padding: '3px',
@@ -229,7 +256,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
           </button>
           {onEdit && (
             <button
-              onClick={() => onEdit(bookmark)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(bookmark);
+              }}
               title="Edit Bookmark"
               style={{
                 padding: '3px',
@@ -243,7 +273,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             </button>
           )}
           <button
-            onClick={() => onTogglePin(bookmark.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin(bookmark.id);
+            }}
             title={bookmark.isPinned ? 'Unpin' : 'Pin'}
             style={{
               padding: '3px',
@@ -254,7 +287,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             <Pin size={12} fill={bookmark.isPinned ? 'var(--amber)' : 'none'} />
           </button>
           <button
-            onClick={() => onToggleFavorite(bookmark.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(bookmark.id);
+            }}
             title={bookmark.isFavorite ? 'Remove Favorite' : 'Favorite'}
             style={{
               padding: '3px',
@@ -265,7 +301,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             <Star size={12} fill={bookmark.isFavorite ? 'var(--rose)' : 'none'} />
           </button>
           <button
-            onClick={() => onToggleArchive(bookmark.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleArchive(bookmark.id);
+            }}
             title={bookmark.isArchived ? 'Unarchive' : 'Archive'}
             style={{
               padding: '3px',
@@ -276,7 +315,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             <Archive size={12} />
           </button>
           <button
-            onClick={() => onDelete(bookmark.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(bookmark.id);
+            }}
             title="Delete"
             style={{
               padding: '3px',

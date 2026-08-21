@@ -173,42 +173,44 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalUrl = normalizeUrlString(url);
-    if (!finalUrl || !title.trim()) return;
+    try {
+      const finalUrl = normalizeUrlString(url);
+      if (!finalUrl || !title.trim()) return;
 
-    const payload = {
-      url: finalUrl,
-      title: title.trim(),
-      description: description.trim(),
-      notes: notes.trim(),
-      tags: selectedTags,
-      collectionId,
-      isVault,
-      isFavorite,
-      isPinned,
-      faviconUrl: faviconUrl || `https://www.google.com/s2/favicons?domain=${new URL(finalUrl).hostname}&sz=64`,
-      previewImageUrl,
-    };
+      let safeFavicon = faviconUrl;
+      if (!safeFavicon) {
+        try {
+          const parsed = new URL(finalUrl);
+          safeFavicon = `https://www.google.com/s2/favicons?domain=${parsed.hostname}&sz=64`;
+        } catch {
+          safeFavicon = '';
+        }
+      }
 
-    if (bookmarkToEdit && onUpdate) {
-      onUpdate(bookmarkToEdit.id, payload);
-    } else {
-      onAdd(payload);
+      const payload = {
+        url: finalUrl,
+        title: title.trim(),
+        description: description.trim(),
+        notes: notes.trim(),
+        tags: selectedTags,
+        collectionId: collectionId || null,
+        isVault: Boolean(isVault),
+        isFavorite: Boolean(isFavorite),
+        isPinned: Boolean(isPinned),
+        faviconUrl: safeFavicon,
+        previewImageUrl: previewImageUrl.trim(),
+      };
+
+      if (bookmarkToEdit && onUpdate) {
+        onUpdate(bookmarkToEdit.id, payload);
+      } else {
+        onAdd(payload);
+      }
+
+      onClose();
+    } catch (err) {
+      console.error('[AddBookmarkModal] Submit error:', err);
     }
-
-    // Reset form
-    setUrl('');
-    setTitle('');
-    setDescription('');
-    setNotes('');
-    setFaviconUrl('');
-    setPreviewImageUrl('');
-    setSelectedTags([]);
-    setCollectionId(null);
-    setIsVault(defaultIsVault);
-    setIsFavorite(false);
-    setIsPinned(false);
-    onClose();
   };
 
   const handleAddCustomTag = () => {

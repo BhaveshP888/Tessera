@@ -320,7 +320,11 @@ export class LocalStoreEngine {
     };
 
     this.pendingDeltas.push(delta);
-    this.bookmarks[existingIndex] = updated;
+    this.bookmarks = [
+      ...this.bookmarks.slice(0, existingIndex),
+      updated,
+      ...this.bookmarks.slice(existingIndex + 1),
+    ];
 
     this.persist('bookmarks', this.bookmarks);
     this.persist('pendingDeltas', this.pendingDeltas);
