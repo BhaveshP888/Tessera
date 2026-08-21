@@ -495,8 +495,8 @@ export const useLibraryStore = () => {
       ? fuzzyRankItems(
           filteredBookmarks,
           searchQuery,
-          (b) => `${b.title || ''} ${b.description || ''} ${b.url || ''} ${(b.tags || []).join(' ')} ${b.notes || ''}`,
-          0.2,
+          (b) => `${b.title || ''} ${b.url || ''} ${b.description || ''} ${(b.tags || []).join(' ')} ${b.notes || ''}`,
+          0.1,
         ).map((r) => r.item)
       : filteredBookmarks;
   }, [filteredBookmarks, searchQuery]);

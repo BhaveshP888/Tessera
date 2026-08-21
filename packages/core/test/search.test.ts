@@ -39,4 +39,32 @@ describe('Search & Trigram Indexing', () => {
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0]?.item.id).toBe('1');
   });
+
+  it('instantly matches incomplete words as the user types (e.g. ro, road, sh)', () => {
+    const items = [
+      { id: '1', title: 'Developer Roadmaps', url: 'https://roadmap.sh' },
+      { id: '2', title: 'Rust Programming Language', url: 'https://rust-lang.org' },
+      { id: '3', title: 'Tailwind CSS Docs', url: 'https://tailwindcss.com' },
+    ];
+
+    // Typing "ro"
+    const resultsRo = fuzzyRankItems(items, 'ro', (i) => `${i.title} ${i.url}`, 0.1);
+    expect(resultsRo.length).toBeGreaterThanOrEqual(1);
+    expect(resultsRo[0]?.item.id).toBe('1');
+
+    // Typing "road"
+    const resultsRoad = fuzzyRankItems(items, 'road', (i) => `${i.title} ${i.url}`, 0.1);
+    expect(resultsRoad.length).toBeGreaterThanOrEqual(1);
+    expect(resultsRoad[0]?.item.id).toBe('1');
+
+    // Typing "sh"
+    const resultsSh = fuzzyRankItems(items, 'sh', (i) => `${i.title} ${i.url}`, 0.1);
+    expect(resultsSh.length).toBeGreaterThanOrEqual(1);
+    expect(resultsSh[0]?.item.id).toBe('1');
+
+    // Multi-token: "road sh"
+    const resultsMulti = fuzzyRankItems(items, 'road sh', (i) => `${i.title} ${i.url}`, 0.1);
+    expect(resultsMulti.length).toBe(1);
+    expect(resultsMulti[0]?.item.id).toBe('1');
+  });
 });
