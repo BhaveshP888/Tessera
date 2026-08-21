@@ -26,27 +26,6 @@ export const App: React.FC = () => {
   const [isVaultPinModalOpen, setIsVaultPinModalOpen] = useState(false);
   const [isVaultSettingsModalOpen, setIsVaultSettingsModalOpen] = useState(false);
 
-  const handleToggleFavorite = (id: string) => {
-    const item = store.bookmarks.find((b) => b.id === id);
-    if (item) {
-      store.updateBookmark(id, { isFavorite: !item.isFavorite });
-    }
-  };
-
-  const handleTogglePin = (id: string) => {
-    const item = store.bookmarks.find((b) => b.id === id);
-    if (item) {
-      store.updateBookmark(id, { isPinned: !item.isPinned });
-    }
-  };
-
-  const handleToggleArchive = (id: string) => {
-    const item = store.bookmarks.find((b) => b.id === id);
-    if (item) {
-      store.updateBookmark(id, { isArchived: !item.isArchived });
-    }
-  };
-
   const isViewingVault = store.activeSection === 'vault';
 
   return (
@@ -249,9 +228,9 @@ export const App: React.FC = () => {
               <BookmarkList
                 bookmarks={store.bookmarks}
                 collections={store.collections}
-                onToggleFavorite={handleToggleFavorite}
-                onTogglePin={handleTogglePin}
-                onToggleArchive={handleToggleArchive}
+                onToggleFavorite={store.toggleFavorite}
+                onTogglePin={store.togglePin}
+                onToggleArchive={store.toggleArchive}
                 onDelete={store.deleteBookmark}
                 onSelectTag={store.setSelectedTag}
                 onEditBookmark={(bookmark) => {

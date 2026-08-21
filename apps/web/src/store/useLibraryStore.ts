@@ -369,6 +369,36 @@ export const useLibraryStore = () => {
     [engine, logAudit],
   );
 
+  const toggleFavorite = useCallback(
+    (id: string) => {
+      const item = engine.getBookmarks().find((b) => b.id === id);
+      if (item) {
+        updateBookmark(id, { isFavorite: !item.isFavorite });
+      }
+    },
+    [engine, updateBookmark],
+  );
+
+  const togglePin = useCallback(
+    (id: string) => {
+      const item = engine.getBookmarks().find((b) => b.id === id);
+      if (item) {
+        updateBookmark(id, { isPinned: !item.isPinned });
+      }
+    },
+    [engine, updateBookmark],
+  );
+
+  const toggleArchive = useCallback(
+    (id: string) => {
+      const item = engine.getBookmarks().find((b) => b.id === id);
+      if (item) {
+        updateBookmark(id, { isArchived: !item.isArchived });
+      }
+    },
+    [engine, updateBookmark],
+  );
+
   const deleteBookmark = useCallback(
     (id: string): boolean => {
       const deleted = engine.deleteBookmark(id);
@@ -530,6 +560,9 @@ export const useLibraryStore = () => {
     addBookmark,
     updateBookmark,
     deleteBookmark,
+    toggleFavorite,
+    togglePin,
+    toggleArchive,
     addTag,
     deleteTag,
     addCollection,

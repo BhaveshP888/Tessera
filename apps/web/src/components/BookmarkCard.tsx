@@ -137,7 +137,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
           ))}
 
           {/* Quick Actions (Hover) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: isHovered ? 1 : 0.35, transition: 'opacity 0.15s ease' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: isHovered ? 1 : 0.4, transition: 'opacity 0.15s ease' }}>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -165,12 +165,41 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                onTogglePin(bookmark.id);
+              }}
+              title={bookmark.isPinned ? 'Unpin' : 'Pin'}
+              style={{
+                padding: '4px',
+                color: bookmark.isPinned ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              <Pin size={13} fill={bookmark.isPinned ? 'var(--text-primary)' : 'none'} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                 onToggleFavorite(bookmark.id);
               }}
-              title="Favorite"
-              style={{ padding: '4px', color: bookmark.isFavorite ? 'var(--rose)' : 'var(--text-muted)' }}
+              title={bookmark.isFavorite ? 'Remove Favorite' : 'Favorite'}
+              style={{
+                padding: '4px',
+                color: bookmark.isFavorite ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
             >
-              <Star size={13} fill={bookmark.isFavorite ? 'var(--rose)' : 'none'} />
+              <Star size={13} fill={bookmark.isFavorite ? 'var(--text-primary)' : 'none'} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleArchive(bookmark.id);
+              }}
+              title={bookmark.isArchived ? 'Unarchive' : 'Archive'}
+              style={{
+                padding: '4px',
+                color: bookmark.isArchived ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              <Archive size={13} />
             </button>
             <button
               onClick={(e) => {
@@ -179,6 +208,8 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
               }}
               title="Delete"
               style={{ padding: '4px', color: 'var(--text-muted)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
             >
               <Trash2 size={13} />
             </button>
@@ -281,10 +312,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             style={{
               padding: '3px',
               borderRadius: 'var(--radius-sm)',
-              color: bookmark.isPinned ? 'var(--amber)' : 'var(--text-muted)',
+              color: bookmark.isPinned ? 'var(--text-primary)' : 'var(--text-muted)',
             }}
           >
-            <Pin size={12} fill={bookmark.isPinned ? 'var(--amber)' : 'none'} />
+            <Pin size={12} fill={bookmark.isPinned ? 'var(--text-primary)' : 'none'} />
           </button>
           <button
             onClick={(e) => {
@@ -295,10 +326,10 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             style={{
               padding: '3px',
               borderRadius: 'var(--radius-sm)',
-              color: bookmark.isFavorite ? 'var(--rose)' : 'var(--text-muted)',
+              color: bookmark.isFavorite ? 'var(--text-primary)' : 'var(--text-muted)',
             }}
           >
-            <Star size={12} fill={bookmark.isFavorite ? 'var(--rose)' : 'none'} />
+            <Star size={12} fill={bookmark.isFavorite ? 'var(--text-primary)' : 'none'} />
           </button>
           <button
             onClick={(e) => {
@@ -309,7 +340,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             style={{
               padding: '3px',
               borderRadius: 'var(--radius-sm)',
-              color: bookmark.isArchived ? 'var(--accent)' : 'var(--text-muted)',
+              color: bookmark.isArchived ? 'var(--text-primary)' : 'var(--text-muted)',
             }}
           >
             <Archive size={12} />
@@ -325,7 +356,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
               borderRadius: 'var(--radius-sm)',
               color: 'var(--text-muted)',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--rose)')}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
           >
             <Trash2 size={12} />
