@@ -634,8 +634,6 @@ export const useLibraryStore = () => {
     restoreVaultFromSync,
     unlockVault,
     lockVault,
-    resetVaultPIN,
-    changeVaultPIN,
     wipeVaultData,
     enableVaultSync,
     disableVaultSync,
