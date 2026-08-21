@@ -170,7 +170,8 @@ describe('LocalStoreEngine Deep Module', () => {
     // Delete Tag
     const tagDeleted = engine.deleteTag('academic');
     expect(tagDeleted).toBe(true);
-    expect(engine.getTags().length).toBe(0);
+    expect(engine.getTags().length).toBe(1);
+    expect(engine.getTags()[0]!.name).toBe('papers');
     // Tag unlinked from bookmark
     expect(engine.getBookmarks()[0]!.tags).toEqual(['papers']);
   });

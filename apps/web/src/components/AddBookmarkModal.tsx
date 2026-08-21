@@ -187,12 +187,24 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
         }
       }
 
+      // Collect any uncommitted tags in newTagInput
+      const finalTags = [...selectedTags];
+      if (newTagInput.trim()) {
+        const rawParts = newTagInput.split(/[\s,]+/);
+        for (const part of rawParts) {
+          const clean = part.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+          if (clean && !finalTags.includes(clean)) {
+            finalTags.push(clean);
+          }
+        }
+      }
+
       const payload = {
         url: finalUrl,
         title: title.trim(),
         description: description.trim(),
         notes: notes.trim(),
-        tags: selectedTags,
+        tags: finalTags,
         collectionId: collectionId || null,
         isVault: Boolean(isVault),
         isFavorite: Boolean(isFavorite),
@@ -214,9 +226,16 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
   };
 
   const handleAddCustomTag = () => {
-    const clean = newTagInput.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
-    if (clean && !selectedTags.includes(clean)) {
-      setSelectedTags([...selectedTags, clean]);
+    const rawParts = newTagInput.split(/[\s,]+/);
+    const newTags: string[] = [];
+    for (const part of rawParts) {
+      const clean = part.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+      if (clean && !selectedTags.includes(clean) && !newTags.includes(clean)) {
+        newTags.push(clean);
+      }
+    }
+    if (newTags.length > 0) {
+      setSelectedTags([...selectedTags, ...newTags]);
       setNewTagInput('');
     }
   };
@@ -548,13 +567,13 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
               Tags
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
-              {(tags || []).map((t) => {
-                const isSelected = (selectedTags || []).includes(t.name);
+              {Array.from(new Set([...(tags || []).map((t) => t.name), ...(selectedTags || [])])).map((tagName) => {
+                const isSelected = (selectedTags || []).includes(tagName);
                 return (
                   <button
-                    key={t.id}
+                    key={tagName}
                     type="button"
-                    onClick={() => toggleTag(t.name)}
+                    onClick={() => toggleTag(tagName)}
                     style={{
                       fontSize: '11px',
                       fontFamily: 'var(--font-mono)',
@@ -562,10 +581,11 @@ export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
                       borderRadius: 'var(--radius-sm)',
                       background: isSelected ? 'var(--accent)' : 'var(--surface)',
                       color: isSelected ? '#030712' : 'var(--text-secondary)',
-                      border: '1px solid var(--border)',
+                      border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      cursor: 'pointer',
                     }}
                   >
-                    #{t.name}
+                    #{tagName}
                   </button>
                 );
               })}

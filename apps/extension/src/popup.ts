@@ -244,16 +244,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const bookmarkId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    let hostname = '';
+    try {
+      hostname = new URL(rawUrl).hostname;
+    } catch {
+      hostname = '';
+    }
+
+    const parsedTags = tagsInput.value
+      .split(/[,\s]+/)
+      .map((t) => t.trim().toLowerCase().replace(/^#/, '').replace(/[^a-z0-9-_]/g, ''))
+      .filter(Boolean);
+
     const bookmarkData = {
       id: bookmarkId,
       url: rawUrl,
       title: rawTitle || rawUrl,
+      description: '',
+      notes: notesInput.value.trim(),
+      faviconUrl: hostname ? `https://www.google.com/s2/favicons?domain=${hostname}&sz=64` : '',
+      previewImageUrl: '',
       collection: selectedCollection || null,
       collectionId: newCollectionId || selectedCollection || null,
       isVault: Boolean(isVault),
-      tags: tagsInput.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
-      notes: notesInput.value.trim(),
-      createdAt: new Date().toISOString(),
+      isArchived: false,
+      isFavorite: false,
+      isPinned: false,
+      tags: parsedTags,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      versionClock: { 'browser-extension': 1 },
     };
 
     let pushedToCloud = false;
@@ -262,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check if cloud sync is available
     if (typeof chrome !== 'undefined' && chrome.storage) {
       const data = await chrome.storage.local.get(['tessera_server_url', 'tessera_master_key']);
-      const rawServerUrl = data['tessera_server_url'] || '';
+      const rawServerUrl = data['tessera_server_url'] || 'https://tesserabm.vercel.app';
       const masterKeyBase64 = data['tessera_master_key'] || '';
       const cleanUrl = normalizeUrl(rawServerUrl);
 
@@ -278,7 +300,8 @@ document.addEventListener('DOMContentLoaded', async () => {
               id: newCollectionId,
               name: selectedCollection,
               color: '#38bdf8',
-              createdAt: new Date().toISOString(),
+              createdAt: now,
+              updatedAt: now,
             });
             deltasToPush.push({
               id: crypto.randomUUID(),
@@ -289,7 +312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               vectorClock: { 'browser-extension': 1 },
               ciphertext: sealedCol.ciphertext,
               nonce: sealedCol.nonce,
-              createdAt: new Date().toISOString(),
+              createdAt: now,
             });
           }
 
@@ -306,7 +329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             vectorClock: { 'browser-extension': 1 },
             ciphertext: sealed.ciphertext,
             nonce: sealed.nonce,
-            createdAt: new Date().toISOString(),
+            createdAt: now,
           });
 
           const pushBody: SyncPushRequest = {
@@ -330,8 +353,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         } catch (err) {
           pushErrorMessage = (err as Error).message;
-          console.error('[Tessera Extension] Push error:', err);
+          console.error('[Tessera Extension] Encryption/push error:', err);
         }
+      } else if (!masterKeyBase64.trim()) {
+        pushErrorMessage = 'Master Key not set. Click ⚙️ in top right to pair your Master Key.';
       }
 
       // Always save to quick queue as backup

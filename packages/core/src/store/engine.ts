@@ -283,6 +283,16 @@ export class LocalStoreEngine {
       versionClock: updatedClock,
     };
 
+    // Auto-register any new tags
+    if (Array.isArray(input.tags)) {
+      for (const t of input.tags) {
+        const clean = t.trim().toLowerCase();
+        if (clean && !this.tags.some((x) => x.name.toLowerCase() === clean)) {
+          this.addTag(clean);
+        }
+      }
+    }
+
     // Seal delta
     const key = isVaultItem && this.vaultSession.isUnlocked()
       ? this.vaultSession.getVaultMasterKey()!
@@ -321,6 +331,16 @@ export class LocalStoreEngine {
     const existing = this.bookmarks[existingIndex]!;
     const now = new Date().toISOString();
     const clock = incrementVectorClock(existing.versionClock, this.deviceId);
+
+    // Auto-register any new tags
+    if (Array.isArray(input.tags)) {
+      for (const t of input.tags) {
+        const clean = t.trim().toLowerCase();
+        if (clean && !this.tags.some((x) => x.name.toLowerCase() === clean)) {
+          this.addTag(clean);
+        }
+      }
+    }
 
     const updated: Bookmark = {
       ...existing,
@@ -733,16 +753,26 @@ export class LocalStoreEngine {
                   if (incTime <= delTime) continue;
                 }
 
-                // Map incoming collection name to ID if needed
-                if ((incoming as any).collection && !incoming.collectionId) {
-                  const targetName = (incoming as any).collection;
+                // Map incoming collection name/ID to registered collection
+                const candidateCol = incoming.collectionId || (incoming as any).collection;
+                if (candidateCol) {
                   let matchingCol = this.collections.find(
-                    (c) => c.name.toLowerCase() === targetName.toLowerCase(),
+                    (c) => c.id === candidateCol || c.name.toLowerCase() === candidateCol.toLowerCase(),
                   );
-                  if (!matchingCol) {
-                    matchingCol = this.addCollection(targetName);
+                  if (!matchingCol && candidateCol.length > 0 && !candidateCol.startsWith('c-')) {
+                    matchingCol = this.addCollection(candidateCol);
                   }
-                  incoming.collectionId = matchingCol.id;
+                  incoming.collectionId = matchingCol ? matchingCol.id : (candidateCol.startsWith('c-') ? candidateCol : null);
+                }
+
+                // Auto-register any new tags
+                if (Array.isArray(incoming.tags)) {
+                  for (const t of incoming.tags) {
+                    const clean = t.trim().toLowerCase();
+                    if (clean && !this.tags.some((x) => x.name.toLowerCase() === clean)) {
+                      this.addTag(clean);
+                    }
+                  }
                 }
 
                 pulledCount++;
