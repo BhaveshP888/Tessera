@@ -6,18 +6,18 @@
   <title>Save to Tessera</title>
   <style>
     :root {
-      --bg: #090d16;
-      --surface: #111a2e;
-      --surface-hover: #16223b;
-      --border: rgba(148, 163, 184, 0.16);
-      --border-focus: #38bdf8;
-      --text: #f1f5f9;
-      --text-dim: #94a3b8;
-      --teal: #38bdf8;
-      --teal-dim: rgba(56, 189, 248, 0.15);
-      --amber: #f59e0b;
-      --amber-dim: rgba(245, 158, 11, 0.15);
-      --green: #10b981;
+      --bg: #000000;
+      --surface: #121215;
+      --surface-hover: #1c1c20;
+      --border: rgba(255, 255, 255, 0.12);
+      --border-focus: #ffffff;
+      --text: #ffffff;
+      --text-dim: #a1a1aa;
+      --accent: #ffffff;
+      --accent-dim: rgba(255, 255, 255, 0.10);
+      --amber: #e4e4e7;
+      --amber-dim: rgba(255, 255, 255, 0.08);
+      --green: #f4f4f5;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -41,13 +41,13 @@
       width: 20px;
       height: 20px;
       border-radius: 5px;
-      background: linear-gradient(135deg, var(--teal), #6366f1);
+      background: #ffffff;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 11px;
       font-weight: 800;
-      color: #030712;
+      color: #000000;
     }
     .brand { font-weight: 700; font-size: 14px; color: var(--text); letter-spacing: -0.2px; }
     .header-actions { display: flex; align-items: center; gap: 6px; }
@@ -64,12 +64,13 @@
       justify-content: center;
       transition: all 0.15s ease;
     }
-    .btn-icon:hover { color: var(--text); border-color: var(--teal); background: var(--surface-hover); }
+    .btn-icon:hover { color: var(--text); border-color: var(--border-focus); background: var(--surface-hover); }
     .badge {
       font-size: 9px;
       font-family: monospace;
-      background: var(--teal-dim);
-      color: var(--teal);
+      background: var(--accent-dim);
+      color: var(--text);
+      border: 1px solid var(--border);
       padding: 2px 6px;
       border-radius: 4px;
       font-weight: 600;
@@ -85,7 +86,7 @@
       margin-bottom: 14px;
     }
     #settings-drawer.open { display: block; }
-    .settings-title { font-size: 11.5px; font-weight: 600; color: var(--teal); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+    .settings-title { font-size: 11.5px; font-weight: 600; color: #ffffff; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
     .settings-hint { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; }
 
     .form-group { margin-bottom: 11px; }
@@ -112,8 +113,8 @@
       background: var(--surface-hover);
     }
     select option {
-      background: #111a2e;
-      color: #f1f5f9;
+      background: #121215;
+      color: #ffffff;
     }
     .actions-grid {
       display: grid;
@@ -135,33 +136,35 @@
       transition: all 0.12s ease;
     }
     .btn-primary {
-      background: var(--teal);
-      color: #031020;
+      background: #ffffff;
+      color: #000000;
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
     .btn-primary:hover {
-      background: #7dd3fc;
+      background: #e4e4e7;
     }
     .btn-vault {
-      background: var(--amber-dim);
-      color: var(--amber);
-      border: 1px solid rgba(245, 158, 11, 0.35);
+      background: #18181b;
+      color: #ffffff;
+      border: 1px solid var(--border);
     }
     .btn-vault:hover {
-      background: rgba(245, 158, 11, 0.25);
-      border-color: var(--amber);
+      background: #27272a;
+      border-color: rgba(255, 255, 255, 0.3);
     }
     .btn-sm {
-      padding: 5px 8px;
+      padding: 6px 8px;
       font-size: 11px;
       border-radius: 4px;
-      background: var(--teal-dim);
-      color: var(--teal);
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      background: #ffffff;
+      color: #000000;
+      font-weight: 600;
+      border: none;
       cursor: pointer;
       margin-top: 8px;
       width: 100%;
     }
-    .btn-sm:hover { background: rgba(56, 189, 248, 0.25); }
+    .btn-sm:hover { background: #e4e4e7; }
     .status {
       margin-top: 10px;
       padding: 7px 10px;
@@ -171,19 +174,19 @@
       display: none;
     }
     .status-library {
-      background: rgba(16, 185, 129, 0.15);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: rgba(255, 255, 255, 0.10);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
     .status-vault {
-      background: var(--amber-dim);
-      color: var(--amber);
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      background: #18181b;
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
     .status-info {
-      background: rgba(56, 189, 248, 0.15);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      background: rgba(255, 255, 255, 0.08);
+      color: #a1a1aa;
+      border: 1px solid var(--border);
     }
     #custom-col-wrap {
       display: none;
@@ -194,10 +197,10 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #94a3b8;
+      background: #71717a;
       margin-right: 4px;
     }
-    .sync-indicator.online { background: #10b981; }
+    .sync-indicator.online { background: #ffffff; }
   </style>
 </head>
 <body>

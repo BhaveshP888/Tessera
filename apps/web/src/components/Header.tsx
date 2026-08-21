@@ -344,7 +344,7 @@ export const Header: React.FC<HeaderProps> = ({
             padding: '6px 12px',
             borderRadius: 'var(--radius-sm)',
             background: 'var(--accent)',
-            color: '#030712',
+            color: 'var(--accent-contrast)',
             fontSize: '12.5px',
             fontWeight: 600,
             boxShadow: 'var(--shadow-sm)',
