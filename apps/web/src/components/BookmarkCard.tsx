@@ -137,7 +137,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
           ))}
 
           {/* Quick Actions (Hover) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: isHovered ? 1 : 0.4, transition: 'opacity 0.15s ease' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: isHovered ? 1 : 0.7, transition: 'opacity 0.15s ease' }}>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -156,7 +156,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
                 }}
                 title="Edit Bookmark"
                 style={{ padding: '4px', color: 'var(--text-muted)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
                 onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
               >
                 <Pencil size={13} />
@@ -167,36 +167,36 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
                 e.stopPropagation();
                 onTogglePin(bookmark.id);
               }}
-              title={bookmark.isPinned ? 'Unpin' : 'Pin'}
+              title={bookmark.isPinned ? 'Unpin' : 'Pin to top'}
               style={{
                 padding: '4px',
-                color: bookmark.isPinned ? 'var(--text-primary)' : 'var(--text-muted)',
+                color: bookmark.isPinned ? '#38bdf8' : 'var(--text-muted)',
               }}
             >
-              <Pin size={13} fill={bookmark.isPinned ? 'var(--text-primary)' : 'none'} />
+              <Pin size={13} fill={bookmark.isPinned ? '#38bdf8' : 'none'} />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleFavorite(bookmark.id);
               }}
-              title={bookmark.isFavorite ? 'Remove Favorite' : 'Favorite'}
+              title={bookmark.isFavorite ? 'Remove Favorite' : 'Add to Favorites'}
               style={{
                 padding: '4px',
-                color: bookmark.isFavorite ? 'var(--text-primary)' : 'var(--text-muted)',
+                color: bookmark.isFavorite ? '#fbbf24' : 'var(--text-muted)',
               }}
             >
-              <Star size={13} fill={bookmark.isFavorite ? 'var(--text-primary)' : 'none'} />
+              <Star size={13} fill={bookmark.isFavorite ? '#fbbf24' : 'none'} />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleArchive(bookmark.id);
               }}
-              title={bookmark.isArchived ? 'Unarchive' : 'Archive'}
+              title={bookmark.isArchived ? 'Unarchive (Move to Library)' : 'Archive'}
               style={{
                 padding: '4px',
-                color: bookmark.isArchived ? 'var(--text-primary)' : 'var(--text-muted)',
+                color: bookmark.isArchived ? '#c084fc' : 'var(--text-muted)',
               }}
             >
               <Archive size={13} />
@@ -208,7 +208,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
               }}
               title="Delete"
               style={{ padding: '4px', color: 'var(--text-muted)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#f87171')}
               onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
             >
               <Trash2 size={13} />
@@ -227,7 +227,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
       onMouseLeave={() => setIsHovered(false)}
       style={{
         background: 'var(--surface)',
-        border: `1px solid ${isHovered ? 'var(--border-hover)' : 'var(--border)'}`,
+        border: `1px solid ${bookmark.isPinned ? 'rgba(56, 189, 248, 0.3)' : isHovered ? 'var(--border-hover)' : 'var(--border)'}`,
         borderRadius: 'var(--radius-md)',
         padding: '14px 16px',
         display: 'flex',
@@ -252,6 +252,21 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
             {domain}
           </span>
+          {bookmark.isPinned && (
+            <span
+              style={{
+                fontSize: '9px',
+                fontFamily: 'var(--font-mono)',
+                padding: '1px 5px',
+                borderRadius: '3px',
+                background: 'rgba(56, 189, 248, 0.15)',
+                color: '#38bdf8',
+                fontWeight: 600,
+              }}
+            >
+              PINNED
+            </span>
+          )}
           {bookmark.isVault && (
             <span
               style={{
@@ -270,7 +285,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
         </div>
 
         {/* Action icons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1px', opacity: isHovered ? 1 : 0.6, transition: 'opacity 0.15s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1px', opacity: isHovered ? 1 : 0.75, transition: 'opacity 0.15s ease' }}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -297,7 +312,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
                 borderRadius: 'var(--radius-sm)',
                 color: 'var(--text-muted)',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
               onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
             >
               <Pencil size={12} />
@@ -308,39 +323,39 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
               e.stopPropagation();
               onTogglePin(bookmark.id);
             }}
-            title={bookmark.isPinned ? 'Unpin' : 'Pin'}
+            title={bookmark.isPinned ? 'Unpin' : 'Pin to top'}
             style={{
               padding: '3px',
               borderRadius: 'var(--radius-sm)',
-              color: bookmark.isPinned ? 'var(--text-primary)' : 'var(--text-muted)',
+              color: bookmark.isPinned ? '#38bdf8' : 'var(--text-muted)',
             }}
           >
-            <Pin size={12} fill={bookmark.isPinned ? 'var(--text-primary)' : 'none'} />
+            <Pin size={12} fill={bookmark.isPinned ? '#38bdf8' : 'none'} />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onToggleFavorite(bookmark.id);
             }}
-            title={bookmark.isFavorite ? 'Remove Favorite' : 'Favorite'}
+            title={bookmark.isFavorite ? 'Remove Favorite' : 'Add to Favorites'}
             style={{
               padding: '3px',
               borderRadius: 'var(--radius-sm)',
-              color: bookmark.isFavorite ? 'var(--text-primary)' : 'var(--text-muted)',
+              color: bookmark.isFavorite ? '#fbbf24' : 'var(--text-muted)',
             }}
           >
-            <Star size={12} fill={bookmark.isFavorite ? 'var(--text-primary)' : 'none'} />
+            <Star size={12} fill={bookmark.isFavorite ? '#fbbf24' : 'none'} />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onToggleArchive(bookmark.id);
             }}
-            title={bookmark.isArchived ? 'Unarchive' : 'Archive'}
+            title={bookmark.isArchived ? 'Unarchive (Move to Library)' : 'Archive'}
             style={{
               padding: '3px',
               borderRadius: 'var(--radius-sm)',
-              color: bookmark.isArchived ? 'var(--text-primary)' : 'var(--text-muted)',
+              color: bookmark.isArchived ? '#c084fc' : 'var(--text-muted)',
             }}
           >
             <Archive size={12} />
@@ -356,7 +371,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
               borderRadius: 'var(--radius-sm)',
               color: 'var(--text-muted)',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#f87171')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
           >
             <Trash2 size={12} />

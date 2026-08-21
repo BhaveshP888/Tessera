@@ -359,6 +359,10 @@ export const useLibraryStore = () => {
     (id: string, input: UpdateBookmarkInput): Bookmark | null => {
       const updated = engine.updateBookmark(id, input);
       if (updated) {
+        setBookmarks(engine.getBookmarks());
+        setTags(engine.getTags());
+        setCollections(engine.getCollections());
+        setPendingDeltasCount(engine.getPendingDeltasCount());
         logAudit('sync_push', 'success', { action: 'update_bookmark', id });
         setTimeout(() => {
           engine.sync();
@@ -403,6 +407,10 @@ export const useLibraryStore = () => {
     (id: string): boolean => {
       const deleted = engine.deleteBookmark(id);
       if (deleted) {
+        setBookmarks(engine.getBookmarks());
+        setTags(engine.getTags());
+        setCollections(engine.getCollections());
+        setPendingDeltasCount(engine.getPendingDeltasCount());
         logAudit('sync_push', 'success', { action: 'delete_bookmark', id });
         setTimeout(() => {
           engine.sync();
@@ -507,7 +515,7 @@ export const useLibraryStore = () => {
   }, [bookmarks, isViewingVault]);
 
   const filteredBookmarks = useMemo(() => {
-    return targetBookmarks.filter((b) => {
+    const list = targetBookmarks.filter((b) => {
       if (viewFilter === 'favorites' && !b.isFavorite) return false;
       if (viewFilter === 'archived' && !b.isArchived) return false;
       if (viewFilter === 'pinned' && !b.isPinned) return false;
@@ -517,6 +525,18 @@ export const useLibraryStore = () => {
       if (selectedTag && !(b.tags || []).includes(selectedTag)) return false;
 
       return true;
+    });
+
+    // Pinned bookmarks float to top in all/favorites views
+    return list.sort((a, b) => {
+      if (viewFilter === 'all' || viewFilter === 'favorites') {
+        const pinA = a.isPinned ? 1 : 0;
+        const pinB = b.isPinned ? 1 : 0;
+        if (pinA !== pinB) return pinB - pinA;
+      }
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
     });
   }, [targetBookmarks, viewFilter, selectedCollectionId, selectedTag]);
 
