@@ -11,12 +11,14 @@ export const createVectorClock = (): VectorClock => ({});
  * Increments the lamport counter for a specific device.
  */
 export const incrementVectorClock = (
-  clock: VectorClock,
-  deviceId: string,
+  clock?: VectorClock | null,
+  deviceId?: string,
 ): VectorClock => {
-  const current = clock[deviceId] ?? 0;
+  const safeClock = clock && typeof clock === 'object' ? clock : {};
+  if (!deviceId) return { ...safeClock };
+  const current = safeClock[deviceId] ?? 0;
   return {
-    ...clock,
+    ...safeClock,
     [deviceId]: current + 1,
   };
 };
@@ -25,11 +27,13 @@ export const incrementVectorClock = (
  * Merges two vector clocks by taking the pointwise maximum for every known device.
  */
 export const mergeVectorClocks = (
-  a: VectorClock,
-  b: VectorClock,
+  a?: VectorClock | null,
+  b?: VectorClock | null,
 ): VectorClock => {
-  const merged: VectorClock = { ...a };
-  for (const [deviceId, counter] of Object.entries(b)) {
+  const safeA = a && typeof a === 'object' ? a : {};
+  const safeB = b && typeof b === 'object' ? b : {};
+  const merged: VectorClock = { ...safeA };
+  for (const [deviceId, counter] of Object.entries(safeB)) {
     const existing = merged[deviceId] ?? 0;
     merged[deviceId] = Math.max(existing, counter);
   }
@@ -40,17 +44,19 @@ export const mergeVectorClocks = (
  * Compares two vector clocks to determine causality.
  */
 export const compareVectorClocks = (
-  a: VectorClock,
-  b: VectorClock,
+  a?: VectorClock | null,
+  b?: VectorClock | null,
 ): ClockOrdering => {
+  const safeA = a && typeof a === 'object' ? a : {};
+  const safeB = b && typeof b === 'object' ? b : {};
   let aHasGreater = false;
   let bHasGreater = false;
 
-  const allDevices = new Set([...Object.keys(a), ...Object.keys(b)]);
+  const allDevices = new Set([...Object.keys(safeA), ...Object.keys(safeB)]);
 
   for (const device of allDevices) {
-    const counterA = a[device] ?? 0;
-    const counterB = b[device] ?? 0;
+    const counterA = safeA[device] ?? 0;
+    const counterB = safeB[device] ?? 0;
 
     if (counterA > counterB) {
       aHasGreater = true;

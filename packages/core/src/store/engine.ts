@@ -147,7 +147,13 @@ export class LocalStoreEngine {
   }
 
   private loadPersistedState(): void {
-    this.bookmarks = this.safeJsonParse<Bookmark[]>('bookmarks', []);
+    const rawBookmarks = this.safeJsonParse<Bookmark[]>('bookmarks', []);
+    this.bookmarks = Array.isArray(rawBookmarks)
+      ? rawBookmarks.map((b) => ({
+          ...b,
+          versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
+        }))
+      : [];
     this.tags = this.safeJsonParse<Tag[]>('tags', []);
     this.collections = this.safeJsonParse<Collection[]>('collections', []);
     this.deletedTombstones = this.safeJsonParse<Record<string, string>>('deletedTombstones', {});
@@ -696,7 +702,11 @@ export class LocalStoreEngine {
 
       let count = 0;
       if (Array.isArray(payload.bookmarks)) {
-        const merged = [...payload.bookmarks];
+        const sanitizedIncoming = payload.bookmarks.map((b) => ({
+          ...b,
+          versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
+        }));
+        const merged = [...sanitizedIncoming];
         for (const item of this.bookmarks) {
           if (!merged.some((m) => m.id === item.id)) {
             merged.push(item);
