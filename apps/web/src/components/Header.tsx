@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   List as ListIcon,
   Command,
+  PanelLeft,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -30,6 +31,8 @@ interface HeaderProps {
   pendingDeltasCount: number;
   viewLayout: 'grid' | 'list';
   onToggleLayout: (layout: 'grid' | 'list') => void;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -49,6 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
   pendingDeltasCount,
   viewLayout,
   onToggleLayout,
+  isSidebarOpen = true,
+  onToggleSidebar,
 }) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,8 +91,39 @@ export const Header: React.FC<HeaderProps> = ({
         zIndex: 20,
       }}
     >
-      {/* Brand & Status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      {/* Brand & Sidebar Toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              borderRadius: 'var(--radius-sm)',
+              background: isSidebarOpen ? 'var(--surface-hover)' : 'var(--surface)',
+              border: '1px solid var(--border)',
+              color: isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--surface-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)';
+              e.currentTarget.style.background = isSidebarOpen ? 'var(--surface-hover)' : 'var(--surface)';
+            }}
+          >
+            <PanelLeft size={16} />
+          </button>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
             style={{
@@ -108,35 +144,6 @@ export const Header: React.FC<HeaderProps> = ({
             Tessera
           </span>
         </div>
-
-        <div
-          style={{
-            height: '16px',
-            width: '1px',
-            background: 'var(--border)',
-          }}
-        />
-
-        {/* Vault Status Pill */}
-        <button
-          onClick={isVaultConfigured && !isVaultUnlocked ? onOpenVaultModal : onOpenVaultSettings}
-          title={isVaultUnlocked ? 'Vault is open (click for settings)' : isVaultConfigured ? 'Vault is locked (click to enter PIN)' : 'Setup secure vault'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 8px',
-            borderRadius: 'var(--radius-sm)',
-            background: isVaultUnlocked ? 'var(--green-dim)' : isVaultConfigured ? 'var(--amber-dim)' : 'var(--surface)',
-            border: `1px solid ${isVaultUnlocked ? 'rgba(52, 211, 153, 0.3)' : isVaultConfigured ? 'rgba(251, 191, 36, 0.3)' : 'var(--border)'}`,
-            color: isVaultUnlocked ? 'var(--green)' : isVaultConfigured ? 'var(--amber)' : 'var(--text-muted)',
-            fontSize: '11.5px',
-            fontWeight: 500,
-          }}
-        >
-          {isVaultUnlocked ? <Unlock size={12} /> : <Lock size={12} />}
-          <span>{isVaultUnlocked ? 'Vault Open' : isVaultConfigured ? 'Vault Locked' : 'Setup Vault'}</span>
-        </button>
       </div>
 
       {/* Center Search / Command Trigger */}

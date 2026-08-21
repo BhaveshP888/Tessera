@@ -16,6 +16,7 @@ import type { Bookmark } from '@tessera/schemas';
 export const App: React.FC = () => {
   const store = useLibraryStore();
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [viewLayout, setViewLayout] = useState<'grid' | 'list'>('grid');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -47,33 +48,37 @@ export const App: React.FC = () => {
         pendingDeltasCount={store.pendingDeltasCount}
         viewLayout={viewLayout}
         onToggleLayout={setViewLayout}
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
       />
 
-      <div style={{ display: 'flex', flex: 1 }}>
-        <Sidebar
-          viewFilter={store.viewFilter}
-          onSelectView={store.setViewFilter}
-          collections={store.collections}
-          selectedCollectionId={store.selectedCollectionId}
-          onSelectCollection={store.setSelectedCollectionId}
-          onAddCollection={store.addCollection}
-          onDeleteCollection={store.deleteCollection}
-          tags={store.tags}
-          selectedTag={store.selectedTag}
-          onSelectTag={store.setSelectedTag}
-          onAddTag={store.addTag}
-          onDeleteTag={store.deleteTag}
-          allBookmarksCount={store.allBookmarksCount}
-          vaultBookmarksCount={store.vaultBookmarksCount}
-          activeSection={store.activeSection}
-          onSelectSection={store.setActiveSection}
-          isVaultConfigured={store.vaultConfig.isConfigured}
-          isVaultUnlocked={store.isVaultUnlocked}
-          onOpenVaultPinModal={() => setIsVaultPinModalOpen(true)}
-          onOpenVaultSettingsModal={() => setIsVaultSettingsModalOpen(true)}
-          onLockVault={store.lockVault}
-          deviceId={store.deviceId}
-        />
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {isSidebarOpen && (
+          <Sidebar
+            viewFilter={store.viewFilter}
+            onSelectView={store.setViewFilter}
+            collections={store.collections}
+            selectedCollectionId={store.selectedCollectionId}
+            onSelectCollection={store.setSelectedCollectionId}
+            onAddCollection={store.addCollection}
+            onDeleteCollection={store.deleteCollection}
+            tags={store.tags}
+            selectedTag={store.selectedTag}
+            onSelectTag={store.setSelectedTag}
+            onAddTag={store.addTag}
+            onDeleteTag={store.deleteTag}
+            allBookmarksCount={store.allBookmarksCount}
+            vaultBookmarksCount={store.vaultBookmarksCount}
+            activeSection={store.activeSection}
+            onSelectSection={store.setActiveSection}
+            isVaultConfigured={store.vaultConfig.isConfigured}
+            isVaultUnlocked={store.isVaultUnlocked}
+            onOpenVaultPinModal={() => setIsVaultPinModalOpen(true)}
+            onOpenVaultSettingsModal={() => setIsVaultSettingsModalOpen(true)}
+            onLockVault={store.lockVault}
+            deviceId={store.deviceId}
+          />
+        )}
 
         <main style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(100vh - 57px)' }}>
           {/* Vault locked hero state */}
