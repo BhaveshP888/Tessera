@@ -9,6 +9,7 @@ interface KeyManagementModalProps {
   onExportFullBackup?: () => any;
   onRestoreFullBackup?: (backup: any) => Promise<{ success: boolean; count?: number; error?: string }>;
   onSync?: () => void;
+  onForcePush?: () => Promise<{ pushedCount: number; success: boolean }>;
 }
 
 export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
@@ -19,6 +20,7 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
   onExportFullBackup,
   onRestoreFullBackup,
   onSync,
+  onForcePush,
 }) => {
   const [copied, setCopied] = useState(false);
   const [importKeyInput, setImportKeyInput] = useState('');
@@ -305,6 +307,51 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
               />
             </div>
           </div>
+
+          {/* Cloud Push & Sync Trigger */}
+          {onForcePush && (
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                Cloud Relay Sync
+              </label>
+              <button
+                onClick={async () => {
+                  setIsProcessing(true);
+                  setImportStatus('Pushing all encrypted bookmarks to cloud relay...');
+                  try {
+                    const res = await onForcePush();
+                    if (res.success) {
+                      setImportStatus(`Pushed ${res.pushedCount} encrypted items to cloud relay successfully!`);
+                    } else {
+                      setImportStatus('Failed to push to cloud relay.');
+                    }
+                  } catch {
+                    setImportStatus('Cloud push error.');
+                  } finally {
+                    setIsProcessing(false);
+                  }
+                }}
+                disabled={isProcessing}
+                style={{
+                  width: '100%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--surface-hover)',
+                  border: '1px solid var(--border-hover)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                }}
+              >
+                <RefreshCw size={13} style={{ animation: isProcessing ? 'spin 1s linear infinite' : 'none' }} />
+                <span>Push All Bookmarks to Cloud Relay (Force Sync)</span>
+              </button>
+            </div>
+          )}
 
           {/* Pair with Another Browser / Device */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>

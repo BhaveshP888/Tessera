@@ -493,8 +493,8 @@ export class LocalStoreEngine {
     try {
       let deltasToPush = [...this.pendingDeltas];
 
-      // Full push: package all local non-deleted bookmarks
-      if (forceFullPush && this.bookmarks.length > 0) {
+      // Full push: package all local non-deleted bookmarks and collections
+      if (forceFullPush && (this.bookmarks.length > 0 || this.collections.length > 0)) {
         const now = new Date().toISOString();
         deltasToPush = [...this.pendingDeltas];
         for (const b of this.bookmarks) {
@@ -516,6 +516,22 @@ export class LocalStoreEngine {
             ciphertext: sealed.ciphertext,
             nonce: sealed.nonce,
             createdAt: b.updatedAt || now,
+          });
+        }
+
+        for (const col of this.collections) {
+          const colKey = deriveRecordKey(this.masterKey, col.id);
+          const colSealed = sealRecord(colKey, col);
+          deltasToPush.push({
+            id: crypto.randomUUID(),
+            entityType: 'collection',
+            entityId: col.id,
+            deviceId: this.deviceId,
+            lamportTs: 1,
+            vectorClock: { [this.deviceId]: 1 },
+            ciphertext: colSealed.ciphertext,
+            nonce: colSealed.nonce,
+            createdAt: col.createdAt || now,
           });
         }
       }

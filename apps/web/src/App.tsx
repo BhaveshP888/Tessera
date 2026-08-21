@@ -292,6 +292,7 @@ export const App: React.FC = () => {
         onExportFullBackup={store.exportFullBackup}
         onRestoreFullBackup={store.restoreFullBackup}
         onSync={() => store.performSync(true)}
+        onForcePush={() => store.performSync(true)}
       />
 
       <AuditLogModal
