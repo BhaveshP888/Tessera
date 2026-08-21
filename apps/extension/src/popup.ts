@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Pull collections from storage and cloud
   const refreshCollectionsAndStatus = async () => {
-    let serverUrl = '';
+    let serverUrl = 'https://tesserabm.vercel.app';
     let masterKeyBase64 = '';
     let localCollections: string[] = [];
 
@@ -80,12 +80,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         'tessera_master_key',
         'tessera_collections',
       ]);
-      serverUrl = data['tessera_server_url'] || '';
+      serverUrl = data['tessera_server_url'] || 'https://tesserabm.vercel.app';
       masterKeyBase64 = data['tessera_master_key'] || '';
       localCollections = data['tessera_collections'] || [];
 
       serverUrlInput.value = serverUrl;
       masterKeyInput.value = masterKeyBase64;
+    } else {
+      serverUrlInput.value = serverUrl;
     }
 
     renderCollections(localCollections);
@@ -111,7 +113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const pullPayload: SyncPullRequest = {
             deviceId: 'browser-extension',
             sinceCursor: 0,
-            limit: 300,
+            limit: 500,
           };
 
           const res = await fetch(`${cleanUrl}/api/sync/pull`, {
@@ -126,20 +128,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             const masterKey = base64ToUint8Array(masterKeyBase64.trim());
 
             for (const delta of body.deltas || []) {
-              if (delta.entityType === 'collection' && delta.ciphertext && delta.nonce) {
-                try {
-                  const recordKey = deriveRecordKey(masterKey, delta.entityId);
-                  const unsealed = unsealRecord<{ name?: string }>(recordKey, delta.ciphertext, delta.nonce);
-                  if (unsealed?.data?.name) {
-                    pulledCollections.add(unsealed.data.name);
+              if (delta.ciphertext && delta.nonce) {
+                if (delta.entityType === 'collection') {
+                  try {
+                    const recordKey = deriveRecordKey(masterKey, delta.entityId);
+                    const unsealed = unsealRecord<{ name?: string }>(recordKey, delta.ciphertext, delta.nonce);
+                    if (unsealed?.data?.name) {
+                      pulledCollections.add(unsealed.data.name);
+                    }
+                  } catch (err) {
+                    console.warn('[Tessera Extension] Failed to unseal collection:', err);
                   }
-                } catch (err) {
-                  console.warn('[Tessera Extension] Failed to unseal collection:', err);
+                } else if (delta.entityType === 'bookmark') {
+                  try {
+                    const recordKey = deriveRecordKey(masterKey, delta.entityId);
+                    const unsealed = unsealRecord<{ collection?: string }>(recordKey, delta.ciphertext, delta.nonce);
+                    if (unsealed?.data?.collection && typeof unsealed.data.collection === 'string') {
+                      pulledCollections.add(unsealed.data.collection);
+                    }
+                  } catch {}
                 }
               }
             }
 
-            const updatedList = Array.from(pulledCollections);
+            const updatedList = Array.from(pulledCollections).filter(Boolean);
             renderCollections(updatedList);
 
             if (typeof chrome !== 'undefined' && chrome.storage) {

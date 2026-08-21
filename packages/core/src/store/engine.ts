@@ -476,14 +476,42 @@ export class LocalStoreEngine {
 
     this.collections.push(newCol);
     this.persist('collections', this.collections);
+
+    try {
+      const colKey = deriveRecordKey(this.masterKey, newCol.id);
+      const colSealed = sealRecord(colKey, newCol);
+      const delta: SyncDelta = {
+        id: crypto.randomUUID(),
+        entityType: 'collection',
+        entityId: newCol.id,
+        deviceId: this.deviceId,
+        lamportTs: 1,
+        vectorClock: { [this.deviceId]: 1 },
+        ciphertext: colSealed.ciphertext,
+        nonce: colSealed.nonce,
+        createdAt: newCol.createdAt,
+      };
+      this.pendingDeltas.push(delta);
+      this.persist('pendingDeltas', this.pendingDeltas);
+    } catch (err) {
+      console.warn('[LocalStoreEngine] Collection delta sealing failed:', err);
+    }
+
     this.notify();
+    this.triggerGistAutoBackup();
+
+    setTimeout(() => {
+      this.sync(false);
+    }, 50);
+
     return newCol;
   }
 
   public deleteCollection(id: string): boolean {
-    const initialLen = this.collections.length;
+    const existing = this.collections.find((c) => c.id === id);
+    if (!existing) return false;
+
     this.collections = this.collections.filter((c) => c.id !== id);
-    if (this.collections.length === initialLen) return false;
 
     // Detach deleted collection from bookmarks
     let modified = false;
@@ -497,7 +525,35 @@ export class LocalStoreEngine {
 
     this.persist('collections', this.collections);
     if (modified) this.persist('bookmarks', this.bookmarks);
+
+    try {
+      const colKey = deriveRecordKey(this.masterKey, id);
+      const now = new Date().toISOString();
+      const colSealed = sealRecord(colKey, { ...existing, deletedAt: now });
+      const delta: SyncDelta = {
+        id: crypto.randomUUID(),
+        entityType: 'tombstone',
+        entityId: id,
+        deviceId: this.deviceId,
+        lamportTs: 1,
+        vectorClock: { [this.deviceId]: 1 },
+        ciphertext: colSealed.ciphertext,
+        nonce: colSealed.nonce,
+        createdAt: now,
+      };
+      this.pendingDeltas.push(delta);
+      this.persist('pendingDeltas', this.pendingDeltas);
+    } catch (err) {
+      console.warn('[LocalStoreEngine] Collection tombstone delta failed:', err);
+    }
+
     this.notify();
+    this.triggerGistAutoBackup();
+
+    setTimeout(() => {
+      this.sync(false);
+    }, 50);
+
     return true;
   }
 
@@ -622,19 +678,27 @@ export class LocalStoreEngine {
             if (delta.deviceId === this.deviceId) continue;
 
             // Handle Collection entity deltas
-            if (delta.entityType === 'collection') {
+            if (delta.entityType === 'collection' || (delta.entityType === 'tombstone' && delta.entityId.startsWith('c-'))) {
               const colRecordKey = deriveRecordKey(this.masterKey, delta.entityId);
               const unsealedCol = unsealRecord<Collection>(colRecordKey, delta.ciphertext, delta.nonce);
               if (unsealedCol.data) {
                 const incomingCol = unsealedCol.data;
-                pulledCount++;
-                const existingIdx = this.collections.findIndex(
-                  (c) => c.id === incomingCol.id || c.name.toLowerCase() === incomingCol.name.toLowerCase(),
-                );
-                if (existingIdx >= 0) {
-                  this.collections[existingIdx] = incomingCol;
+                const isDeleted = delta.entityType === 'tombstone' || Boolean((incomingCol as any).deletedAt);
+
+                if (isDeleted) {
+                  this.collections = this.collections.filter(
+                    (c) => c.id !== delta.entityId && c.name.toLowerCase() !== incomingCol.name?.toLowerCase(),
+                  );
                 } else {
-                  this.collections = [...this.collections, incomingCol];
+                  pulledCount++;
+                  const existingIdx = this.collections.findIndex(
+                    (c) => c.id === incomingCol.id || c.name.toLowerCase() === incomingCol.name.toLowerCase(),
+                  );
+                  if (existingIdx >= 0) {
+                    this.collections[existingIdx] = incomingCol;
+                  } else {
+                    this.collections = [...this.collections, incomingCol];
+                  }
                 }
                 this.persist('collections', this.collections);
               }
@@ -667,6 +731,18 @@ export class LocalStoreEngine {
                   const incTime = new Date(incoming.updatedAt || delta.createdAt).getTime();
                   const delTime = new Date(tombstoneTime).getTime();
                   if (incTime <= delTime) continue;
+                }
+
+                // Map incoming collection name to ID if needed
+                if ((incoming as any).collection && !incoming.collectionId) {
+                  const targetName = (incoming as any).collection;
+                  let matchingCol = this.collections.find(
+                    (c) => c.name.toLowerCase() === targetName.toLowerCase(),
+                  );
+                  if (!matchingCol) {
+                    matchingCol = this.addCollection(targetName);
+                  }
+                  incoming.collectionId = matchingCol.id;
                 }
 
                 pulledCount++;
