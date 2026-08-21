@@ -1,5 +1,21 @@
-import React, { useState, useRef } from 'react';
-import { X, Key, Shield, Copy, Check, Download, Upload, FileUp, AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  X,
+  Key,
+  Shield,
+  Copy,
+  Check,
+  Download,
+  Upload,
+  FileUp,
+  AlertCircle,
+  RefreshCw,
+  ExternalLink,
+  Github,
+  Cloud,
+  CheckCircle2,
+} from 'lucide-react';
+import type { GistConfig, GistSyncResult } from '@tessera/core';
 
 interface KeyManagementModalProps {
   isOpen: boolean;
@@ -10,6 +26,10 @@ interface KeyManagementModalProps {
   onRestoreFullBackup?: (backup: any) => Promise<{ success: boolean; count?: number; error?: string }>;
   onSync?: () => void;
   onForcePush?: () => Promise<{ pushedCount: number; success: boolean }>;
+  gistConfig?: GistConfig;
+  onSetGistConfig?: (updates: Partial<GistConfig>) => GistConfig;
+  onBackupToGist?: () => Promise<GistSyncResult>;
+  onRestoreFromGist?: (gistId?: string) => Promise<{ success: boolean; count?: number; error?: string }>;
 }
 
 export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
@@ -21,12 +41,31 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
   onRestoreFullBackup,
   onSync,
   onForcePush,
+  gistConfig,
+  onSetGistConfig,
+  onBackupToGist,
+  onRestoreFromGist,
 }) => {
   const [copied, setCopied] = useState(false);
   const [importKeyInput, setImportKeyInput] = useState('');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Gist state
+  const [gistToken, setGistToken] = useState(gistConfig?.token || '');
+  const [gistIdInput, setGistIdInput] = useState(gistConfig?.gistId || '');
+  const [gistAutoSync, setGistAutoSync] = useState(gistConfig?.autoSync ?? false);
+  const [gistStatus, setGistStatus] = useState<string | null>(null);
+  const [isGistSyncing, setIsGistSyncing] = useState(false);
+
+  useEffect(() => {
+    if (gistConfig) {
+      setGistToken(gistConfig.token || '');
+      setGistIdInput(gistConfig.gistId || '');
+      setGistAutoSync(gistConfig.autoSync ?? false);
+    }
+  }, [gistConfig]);
 
   if (!isOpen) return null;
 
@@ -315,6 +354,7 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
                 Cloud Relay Sync
               </label>
               <button
+                type="button"
                 onClick={async () => {
                   setIsProcessing(true);
                   setImportStatus('Pushing all encrypted bookmarks to cloud relay...');
@@ -345,6 +385,7 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
                   color: 'var(--text-primary)',
                   fontSize: '12px',
                   fontWeight: 500,
+                  cursor: 'pointer',
                 }}
               >
                 <RefreshCw size={13} style={{ animation: isProcessing ? 'spin 1s linear infinite' : 'none' }} />
@@ -352,6 +393,250 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
               </button>
             </div>
           )}
+
+          {/* Automated GitHub Gist Zero-Knowledge Backup */}
+          <div
+            style={{
+              borderTop: '1px solid var(--border)',
+              paddingTop: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Github size={15} style={{ color: 'var(--accent)' }} />
+                <label style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  GitHub Gist Auto-Backup (Zero-Knowledge)
+                </label>
+              </div>
+              <a
+                href="https://github.com/settings/tokens/new?scopes=gist&description=Tessera+Encrypted+Backup"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--accent)',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>Get GitHub Token</span>
+                <ExternalLink size={10} />
+              </a>
+            </div>
+
+            <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              Automatically saves encrypted backups to your secret GitHub Gist. 100% private and zero-knowledge.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <input
+                type="password"
+                value={gistToken}
+                onChange={(e) => {
+                  setGistToken(e.target.value);
+                  if (onSetGistConfig) onSetGistConfig({ token: e.target.value });
+                }}
+                placeholder="GitHub Personal Access Token (ghp_...)"
+                style={{
+                  width: '100%',
+                  padding: '7px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  fontSize: '12px',
+                  outline: 'none',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={gistIdInput}
+                  onChange={(e) => {
+                    setGistIdInput(e.target.value);
+                    if (onSetGistConfig) onSetGistConfig({ gistId: e.target.value || null });
+                  }}
+                  placeholder="Existing Secret Gist ID (optional, auto-created)"
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    fontSize: '12px',
+                    outline: 'none',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                />
+              </div>
+
+              {/* Auto-Sync Checkbox */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  marginTop: '2px',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={gistAutoSync}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setGistAutoSync(checked);
+                    if (onSetGistConfig) onSetGistConfig({ autoSync: checked });
+                  }}
+                  style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                />
+                <span>Continuous auto-backup on bookmark changes</span>
+              </label>
+
+              {/* Action Buttons: Backup Now & Restore Now */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!gistToken.trim()) {
+                      setGistStatus('Please enter your GitHub token first.');
+                      return;
+                    }
+                    setIsGistSyncing(true);
+                    setGistStatus('Encrypting and pushing backup to GitHub Gist...');
+                    try {
+                      if (onBackupToGist) {
+                        const res = await onBackupToGist();
+                        if (res.success) {
+                          setGistStatus(`Backed up ${res.count ?? 'all'} bookmarks to Gist ${res.gistId} successfully!`);
+                          if (res.gistId) setGistIdInput(res.gistId);
+                        } else {
+                          setGistStatus(res.error || 'Failed to push backup to Gist.');
+                        }
+                      }
+                    } catch (err) {
+                      setGistStatus((err as Error).message || 'Gist backup failed.');
+                    } finally {
+                      setIsGistSyncing(false);
+                    }
+                  }}
+                  disabled={isGistSyncing || !gistToken.trim()}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--accent)',
+                    color: '#030712',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: isGistSyncing || !gistToken.trim() ? 'not-allowed' : 'pointer',
+                    opacity: isGistSyncing || !gistToken.trim() ? 0.6 : 1,
+                  }}
+                >
+                  <Cloud size={13} />
+                  <span>{isGistSyncing ? 'Backing Up...' : 'Backup to Gist Now'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!gistToken.trim()) {
+                      setGistStatus('Please enter your GitHub token first.');
+                      return;
+                    }
+                    if (!gistIdInput.trim()) {
+                      setGistStatus('Please enter the Gist ID to restore from.');
+                      return;
+                    }
+                    if (!window.confirm('Restore library from this secret GitHub Gist? Your bookmarks will be decrypted with your Master Key.')) {
+                      return;
+                    }
+                    setIsGistSyncing(true);
+                    setGistStatus('Pulling and decrypting backup from GitHub Gist...');
+                    try {
+                      if (onRestoreFromGist) {
+                        const res = await onRestoreFromGist(gistIdInput.trim());
+                        if (res.success) {
+                          setGistStatus(`Successfully restored ${res.count ?? 'all'} bookmarks from Gist!`);
+                        } else {
+                          setGistStatus(res.error || 'Failed to restore backup from Gist.');
+                        }
+                      }
+                    } catch (err) {
+                      setGistStatus((err as Error).message || 'Gist restore failed.');
+                    } finally {
+                      setIsGistSyncing(false);
+                    }
+                  }}
+                  disabled={isGistSyncing || !gistToken.trim()}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--surface-hover)',
+                    border: '1px solid var(--border-hover)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    cursor: isGistSyncing || !gistToken.trim() ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <Download size={13} />
+                  <span>Restore from Gist</span>
+                </button>
+              </div>
+
+              {Boolean(gistStatus) && (
+                <p
+                  style={{
+                    fontSize: '11.5px',
+                    color:
+                      typeof gistStatus === 'string' &&
+                      (gistStatus.toLowerCase().includes('success') || gistStatus.toLowerCase().includes('backed up'))
+                        ? 'var(--green)'
+                        : 'var(--rose)',
+                    marginTop: '4px',
+                  }}
+                >
+                  {gistStatus}
+                </p>
+              )}
+
+              {gistConfig?.lastSyncAt && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  <CheckCircle2 size={12} style={{ color: 'var(--green)' }} />
+                  <span>Last synced: {new Date(gistConfig.lastSyncAt).toLocaleString()}</span>
+                  {gistConfig.gistId && (
+                    <a
+                      href={`https://gist.github.com/${gistConfig.gistId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'var(--accent)', marginLeft: 'auto', textDecoration: 'none' }}
+                    >
+                      View Gist
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Pair with Another Browser / Device */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>

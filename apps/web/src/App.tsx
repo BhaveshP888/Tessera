@@ -297,6 +297,10 @@ export const App: React.FC = () => {
         onRestoreFullBackup={store.restoreFullBackup}
         onSync={() => store.performSync(true)}
         onForcePush={() => store.performSync(true)}
+        gistConfig={store.gistConfig}
+        onSetGistConfig={store.setGistConfig}
+        onBackupToGist={store.backupToGist}
+        onRestoreFromGist={store.restoreFromGist}
       />
 
       <AuditLogModal

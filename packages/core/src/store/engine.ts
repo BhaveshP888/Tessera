@@ -17,6 +17,12 @@ import { sealRecord, unsealRecord } from '../crypto/cipher.js';
 import { VaultSessionManager } from '../crypto/vault-session.js';
 import { incrementVectorClock } from '../sync/vector-clock.js';
 import { reconcileBookmark } from '../sync/lww.js';
+import {
+  pushEncryptedGistBackup,
+  pullEncryptedGistBackup,
+  type GistConfig,
+  type GistSyncResult,
+} from '../backup/gist-backup.js';
 
 export interface IStorageAdapter {
   getItem(key: string): string | null;
@@ -98,6 +104,15 @@ export class LocalStoreEngine {
   private syncCursor = 0;
   private isSyncing = false;
 
+  private gistConfig: GistConfig = {
+    token: '',
+    gistId: null,
+    autoSync: false,
+    lastSyncAt: null,
+    lastError: null,
+  };
+  private gistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   public readonly vaultSession = new VaultSessionManager();
   private subscribers = new Set<() => void>();
 
@@ -158,6 +173,13 @@ export class LocalStoreEngine {
     this.collections = this.safeJsonParse<Collection[]>('collections', []);
     this.deletedTombstones = this.safeJsonParse<Record<string, string>>('deletedTombstones', {});
     this.pendingDeltas = this.safeJsonParse<SyncDelta[]>('pendingDeltas', []);
+    this.gistConfig = this.safeJsonParse<GistConfig>('gistConfig', {
+      token: '',
+      gistId: null,
+      autoSync: false,
+      lastSyncAt: null,
+      lastError: null,
+    });
   }
 
   private persist(key: string, data: unknown): void {
@@ -287,6 +309,7 @@ export class LocalStoreEngine {
     this.persist('bookmarks', this.bookmarks);
     this.persist('pendingDeltas', this.pendingDeltas);
     this.notify();
+    this.triggerGistAutoBackup();
 
     return bookmark;
   }
@@ -343,6 +366,7 @@ export class LocalStoreEngine {
     }
 
     this.notify();
+    this.triggerGistAutoBackup();
     return updated;
   }
 
@@ -389,6 +413,7 @@ export class LocalStoreEngine {
     }
 
     this.notify();
+    this.triggerGistAutoBackup();
     return true;
   }
 
@@ -751,5 +776,92 @@ export class LocalStoreEngine {
     } catch (err) {
       return { success: false, error: (err as Error).message };
     }
+  }
+
+  // --- GitHub Gist Zero-Knowledge Cloud Backup ---
+
+  public getGistConfig(): GistConfig {
+    return { ...this.gistConfig };
+  }
+
+  public setGistConfig(updates: Partial<GistConfig>): GistConfig {
+    this.gistConfig = { ...this.gistConfig, ...updates };
+    this.persist('gistConfig', this.gistConfig);
+    this.notify();
+    return { ...this.gistConfig };
+  }
+
+  public triggerGistAutoBackup(): void {
+    if (!this.gistConfig.autoSync || !this.gistConfig.token.trim()) return;
+
+    if (this.gistDebounceTimer) {
+      clearTimeout(this.gistDebounceTimer);
+    }
+
+    this.gistDebounceTimer = setTimeout(() => {
+      this.backupToGist().catch((err) => {
+        console.warn('[LocalStoreEngine] Gist auto-backup failed:', err);
+      });
+    }, 2500);
+  }
+
+  public async backupToGist(): Promise<GistSyncResult> {
+    if (!this.gistConfig.token.trim()) {
+      return { success: false, error: 'No GitHub Personal Access Token configured.' };
+    }
+
+    const payload = this.exportBackup();
+    const res = await pushEncryptedGistBackup(
+      this.gistConfig.token,
+      this.gistConfig.gistId,
+      payload,
+      this.masterKey,
+      this.fetchFn,
+    );
+
+    if (res.success && res.gistId) {
+      this.setGistConfig({
+        gistId: res.gistId,
+        lastSyncAt: res.updatedAt || new Date().toISOString(),
+        lastError: null,
+      });
+    } else if (res.error) {
+      this.setGistConfig({
+        lastError: res.error,
+      });
+    }
+
+    return res;
+  }
+
+  public async restoreFromGist(gistId?: string): Promise<{ success: boolean; count?: number; error?: string }> {
+    const targetGistId = (gistId || this.gistConfig.gistId || '').trim();
+    if (!this.gistConfig.token.trim()) {
+      return { success: false, error: 'No GitHub Personal Access Token configured.' };
+    }
+    if (!targetGistId) {
+      return { success: false, error: 'No Gist ID provided.' };
+    }
+
+    const res = await pullEncryptedGistBackup(
+      this.gistConfig.token,
+      targetGistId,
+      this.masterKey,
+      this.fetchFn,
+    );
+
+    if (!res.success || !res.payload) {
+      const errMessage = res.error || 'Failed to pull backup from GitHub Gist.';
+      this.setGistConfig({ lastError: errMessage });
+      return { success: false, error: errMessage };
+    }
+
+    this.setGistConfig({
+      gistId: targetGistId,
+      lastSyncAt: new Date().toISOString(),
+      lastError: null,
+    });
+
+    return this.restoreBackup(res.payload);
   }
 }

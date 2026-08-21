@@ -114,6 +114,9 @@ export const useLibraryStore = () => {
     ])
   );
 
+  // Gist state
+  const [gistConfig, setGistConfigState] = useState<GistConfig>(() => engine.getGistConfig());
+
   // Subscribe to engine state mutations
   useEffect(() => {
     const syncFromEngine = () => {
@@ -124,6 +127,7 @@ export const useLibraryStore = () => {
       setMasterKeyBase64(engine.getMasterKeyBase64());
       setIsSyncing(engine.getIsSyncing());
       setIsVaultUnlocked(engine.vaultSession.isUnlocked());
+      setGistConfigState(engine.getGistConfig());
     };
 
     return engine.subscribe(syncFromEngine);
@@ -489,6 +493,40 @@ export const useLibraryStore = () => {
     [engine, logAudit],
   );
 
+  const setGistConfig = useCallback(
+    (updates: Partial<GistConfig>) => {
+      const cfg = engine.setGistConfig(updates);
+      setGistConfigState(cfg);
+      return cfg;
+    },
+    [engine],
+  );
+
+  const backupToGist = useCallback(async () => {
+    const res = await engine.backupToGist();
+    setGistConfigState(engine.getGistConfig());
+    if (res.success) {
+      logAudit('sync_push', 'success', { action: 'gist_backup', gistId: res.gistId, count: res.count });
+    } else {
+      logAudit('sync_push', 'failure', { action: 'gist_backup', error: res.error });
+    }
+    return res;
+  }, [engine, logAudit]);
+
+  const restoreFromGist = useCallback(
+    async (gistId?: string) => {
+      const res = await engine.restoreFromGist(gistId);
+      setGistConfigState(engine.getGistConfig());
+      if (res.success) {
+        logAudit('master_key_imported', 'success', { action: 'gist_restore', count: res.count });
+      } else {
+        logAudit('master_key_imported', 'failure', { action: 'gist_restore', error: res.error });
+      }
+      return res;
+    },
+    [engine, logAudit],
+  );
+
   // Background Sync Interval & Tab Focus
   useEffect(() => {
     const handleFocus = () => {
@@ -571,6 +609,7 @@ export const useLibraryStore = () => {
     activeSection,
     vaultConfig,
     isVaultUnlocked,
+    gistConfig,
     setActiveSection,
     setSearchQuery,
     setSelectedTag,
@@ -595,9 +634,14 @@ export const useLibraryStore = () => {
     restoreVaultFromSync,
     unlockVault,
     lockVault,
+    resetVaultPIN,
+    changeVaultPIN,
     wipeVaultData,
     enableVaultSync,
     disableVaultSync,
     logAudit,
+    setGistConfig,
+    backupToGist,
+    restoreFromGist,
   };
 };
