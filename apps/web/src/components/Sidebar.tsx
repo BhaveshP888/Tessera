@@ -89,12 +89,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleVaultClick = () => {
+    onSelectSection('vault');
     if (!isVaultConfigured) {
       onOpenVaultSettingsModal();
     } else if (!isVaultUnlocked) {
       onOpenVaultPinModal();
-    } else {
-      onSelectSection('vault');
     }
   };
 

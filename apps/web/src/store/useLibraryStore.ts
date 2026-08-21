@@ -281,6 +281,7 @@ export const useLibraryStore = () => {
           return next;
         });
         setIsVaultUnlocked(true);
+        setActiveSection('vault');
         logAudit('vault_unlocked', 'success', {});
         return { success: true };
       } else {
@@ -307,6 +308,7 @@ export const useLibraryStore = () => {
   const lockVault = useCallback(() => {
     engine.vaultSession.lock();
     setIsVaultUnlocked(false);
+    setActiveSection('library');
     logAudit('vault_locked', 'success', {});
   }, [engine, logAudit]);
 
