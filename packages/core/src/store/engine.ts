@@ -300,26 +300,6 @@ export class LocalStoreEngine {
       versionClock: clock,
     };
 
-    const key = updated.isVault && this.vaultSession.isUnlocked()
-      ? this.vaultSession.getVaultMasterKey()!
-      : this.masterKey;
-
-    const recordKey = deriveRecordKey(key, id);
-    const sealed = sealRecord(recordKey, updated);
-
-    const delta: SyncDelta = {
-      id: crypto.randomUUID(),
-      entityType: 'bookmark',
-      entityId: id,
-      deviceId: this.deviceId,
-      lamportTs: clock[this.deviceId] || 1,
-      vectorClock: clock,
-      ciphertext: sealed.ciphertext,
-      nonce: sealed.nonce,
-      createdAt: now,
-    };
-
-    this.pendingDeltas.push(delta);
     this.bookmarks = [
       ...this.bookmarks.slice(0, existingIndex),
       updated,
@@ -327,9 +307,36 @@ export class LocalStoreEngine {
     ];
 
     this.persist('bookmarks', this.bookmarks);
-    this.persist('pendingDeltas', this.pendingDeltas);
-    this.notify();
 
+    try {
+      const key = updated.isVault && this.vaultSession.isUnlocked()
+        ? this.vaultSession.getVaultMasterKey()!
+        : this.masterKey;
+
+      if (key) {
+        const recordKey = deriveRecordKey(key, id);
+        const sealed = sealRecord(recordKey, updated);
+
+        const delta: SyncDelta = {
+          id: crypto.randomUUID(),
+          entityType: 'bookmark',
+          entityId: id,
+          deviceId: this.deviceId,
+          lamportTs: clock[this.deviceId] || 1,
+          vectorClock: clock,
+          ciphertext: sealed.ciphertext,
+          nonce: sealed.nonce,
+          createdAt: now,
+        };
+
+        this.pendingDeltas.push(delta);
+        this.persist('pendingDeltas', this.pendingDeltas);
+      }
+    } catch (err) {
+      console.warn('[LocalStoreEngine] Delta sealing skipped:', err);
+    }
+
+    this.notify();
     return updated;
   }
 
@@ -344,32 +351,38 @@ export class LocalStoreEngine {
     this.deletedTombstones[id] = now;
     this.persist('deletedTombstones', this.deletedTombstones);
 
-    const key = b.isVault && this.vaultSession.isUnlocked()
-      ? this.vaultSession.getVaultMasterKey()!
-      : this.masterKey;
-
-    const recordKey = deriveRecordKey(key, id);
-    const sealed = sealRecord(recordKey, { ...b, deletedAt: now, updatedAt: now });
-
-    const delta: SyncDelta = {
-      id: crypto.randomUUID(),
-      entityType: 'tombstone',
-      entityId: id,
-      deviceId: this.deviceId,
-      lamportTs: clock[this.deviceId] || 1,
-      vectorClock: clock,
-      ciphertext: sealed.ciphertext,
-      nonce: sealed.nonce,
-      createdAt: now,
-    };
-
-    this.pendingDeltas.push(delta);
-    this.bookmarks.splice(existingIndex, 1);
-
+    this.bookmarks = this.bookmarks.filter((item) => item.id !== id);
     this.persist('bookmarks', this.bookmarks);
-    this.persist('pendingDeltas', this.pendingDeltas);
-    this.notify();
 
+    try {
+      const key = b.isVault && this.vaultSession.isUnlocked()
+        ? this.vaultSession.getVaultMasterKey()!
+        : this.masterKey;
+
+      if (key) {
+        const recordKey = deriveRecordKey(key, id);
+        const sealed = sealRecord(recordKey, { ...b, deletedAt: now, updatedAt: now });
+
+        const delta: SyncDelta = {
+          id: crypto.randomUUID(),
+          entityType: 'tombstone',
+          entityId: id,
+          deviceId: this.deviceId,
+          lamportTs: clock[this.deviceId] || 1,
+          vectorClock: clock,
+          ciphertext: sealed.ciphertext,
+          nonce: sealed.nonce,
+          createdAt: now,
+        };
+
+        this.pendingDeltas.push(delta);
+        this.persist('pendingDeltas', this.pendingDeltas);
+      }
+    } catch (err) {
+      console.warn('[LocalStoreEngine] Delete tombstone sealing skipped:', err);
+    }
+
+    this.notify();
     return true;
   }
 
