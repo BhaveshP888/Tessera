@@ -208,7 +208,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
           border: '1px solid var(--border-hover)',
           borderRadius: 'var(--radius-lg)',
           width: '100%',
-          maxWidth: '640px',
+          maxWidth: '680px',
           maxHeight: '85vh',
           display: 'flex',
           flexDirection: 'column',
@@ -249,17 +249,17 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
               <div
                 key={ext.id}
                 style={{
-                  padding: '14px',
+                  padding: '14px 16px',
                   borderRadius: 'var(--radius-sm)',
                   background: 'var(--surface)',
                   border: '1px solid var(--border)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '10px',
+                  gap: '12px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                  <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
                         {ext.name}
@@ -273,50 +273,56 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                     {ext.id === 'html-import' && (
                       <button
                         onClick={handleExportHtml}
-                        title="Export library to standard HTML"
+                        title="Export library to standard Netscape HTML format"
                         style={{
-                          display: 'flex',
+                          display: 'inline-flex',
                           alignItems: 'center',
                           gap: '5px',
-                          padding: '5px 10px',
+                          padding: '6px 12px',
                           borderRadius: 'var(--radius-sm)',
                           background: 'var(--surface-active)',
                           border: '1px solid var(--border)',
                           fontSize: '11.5px',
                           fontWeight: 500,
-                          color: 'var(--text-secondary)',
-                          flexShrink: 0,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
                         }}
+                        onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
                       >
                         <Download size={12} />
                         <span>Export HTML</span>
                       </button>
                     )}
 
-                    <button
-                      onClick={() => handleRunExtension(ext)}
-                      disabled={runningExtId === ext.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        padding: '5px 12px',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'var(--accent-dim)',
-                        border: '1px solid var(--accent)',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: 'var(--accent-text)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {ext.id === 'html-import' ? <Upload size={12} /> : <Play size={12} />}
-                      <span>{ext.id === 'html-import' ? 'Run Import' : 'Run'}</span>
-                    </button>
+                    {ext.id !== 'html-import' && (
+                      <button
+                        onClick={() => handleRunExtension(ext)}
+                        disabled={runningExtId === ext.id}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '6px 14px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--accent-dim)',
+                          border: '1px solid var(--accent)',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: 'var(--accent-text)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <Play size={12} />
+                        <span>Run</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -345,7 +351,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
 
                 {/* Browser HTML Input & File Upload */}
                 {ext.id === 'html-import' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -354,30 +360,56 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
                       style={{ display: 'none' }}
                     />
                     
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'var(--surface-hover)',
+                            border: '1px solid var(--border)',
+                            fontSize: '11.5px',
+                            fontWeight: 500,
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <FileCode size={13} />
+                          <span>{uploadedFileName ? `File: ${uploadedFileName}` : 'Select bookmarks.html file...'}</span>
+                        </button>
+
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          or paste HTML below:
+                        </span>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => handleRunExtension(ext)}
+                        disabled={runningExtId === ext.id}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
-                          padding: '6px 12px',
+                          padding: '6px 14px',
                           borderRadius: 'var(--radius-sm)',
-                          background: 'var(--surface-hover)',
-                          border: '1px solid var(--border)',
-                          fontSize: '11.5px',
-                          fontWeight: 500,
-                          color: 'var(--text-primary)',
+                          background: 'var(--accent-dim)',
+                          border: '1px solid var(--accent)',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: 'var(--accent-text)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
                         }}
                       >
-                        <FileCode size={13} />
-                        <span>{uploadedFileName ? `Change file (${uploadedFileName})` : 'Select bookmarks.html file...'}</span>
+                        <Upload size={12} />
+                        <span>Run Import</span>
                       </button>
-
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        or paste raw Netscape HTML below:
-                      </span>
                     </div>
 
                     <textarea
