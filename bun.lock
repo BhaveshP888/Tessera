@@ -29,6 +29,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@tessera/core": "workspace:*",
+        "@tessera/extension-html-import": "workspace:*",
         "@tessera/schemas": "workspace:*",
         "@tessera/sdk": "workspace:*",
         "lucide-react": "^0.475.0",
@@ -44,8 +45,8 @@
         "vite": "^6.1.0",
       },
     },
-    "extensions/markdown-export": {
-      "name": "@tessera/extension-markdown-export",
+    "extensions/html-import": {
+      "name": "@tessera/extension-html-import",
       "version": "1.0.0",
       "dependencies": {
         "@tessera/schemas": "workspace:*",
@@ -55,8 +56,8 @@
         "typescript": "^5.7.3",
       },
     },
-    "extensions/pinboard-import": {
-      "name": "@tessera/extension-pinboard-import",
+    "extensions/markdown-export": {
+      "name": "@tessera/extension-markdown-export",
       "version": "1.0.0",
       "dependencies": {
         "@tessera/schemas": "workspace:*",
@@ -356,9 +357,9 @@
 
     "@tessera/extension": ["@tessera/extension@workspace:apps/extension"],
 
-    "@tessera/extension-markdown-export": ["@tessera/extension-markdown-export@workspace:extensions/markdown-export"],
+    "@tessera/extension-html-import": ["@tessera/extension-html-import@workspace:extensions/html-import"],
 
-    "@tessera/extension-pinboard-import": ["@tessera/extension-pinboard-import@workspace:extensions/pinboard-import"],
+    "@tessera/extension-markdown-export": ["@tessera/extension-markdown-export@workspace:extensions/markdown-export"],
 
     "@tessera/schemas": ["@tessera/schemas@workspace:packages/schemas"],
 

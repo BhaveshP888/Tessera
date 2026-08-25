@@ -315,8 +315,10 @@ export const App: React.FC = () => {
         installedExtensions={store.installedExtensions}
         bookmarks={store.bookmarks}
         tags={store.tags}
+        collections={store.collections}
         onAddBookmark={store.addBookmark}
         onAddTag={store.addTag}
+        onAddCollection={store.addCollection}
         onLogAudit={store.logAudit}
       />
 

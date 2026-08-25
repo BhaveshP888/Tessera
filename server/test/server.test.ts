@@ -74,7 +74,7 @@ describe('Server Relay & Proxy', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.extensions.length).toBeGreaterThanOrEqual(2);
-    expect(body.extensions.map((e: any) => e.id)).toContain('pinboard-import');
+    expect(body.extensions.map((e: any) => e.id)).toContain('html-import');
   });
 
   it('extracts metadata and handles tracking params and ssrf blocking', async () => {

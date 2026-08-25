@@ -91,16 +91,18 @@ export const useLibraryStore = () => {
   const [auditLogs, setAuditLogs] = useState<AuditEvent[]>(() =>
     safeJsonParse(`${STORAGE_PREFIX}auditLogs`, [])
   );
-  const [installedExtensions] = useState<ExtensionManifest[]>(() =>
-    safeJsonParse(`${STORAGE_PREFIX}extensions`, [
+  const [installedExtensions] = useState<ExtensionManifest[]>(() => {
+    const raw = safeJsonParse<ExtensionManifest[]>(`${STORAGE_PREFIX}extensions`, []);
+    const filtered = raw.filter((e) => e.id !== 'pinboard-import');
+    const defaultExts: ExtensionManifest[] = [
       {
-        id: 'pinboard-import',
-        name: 'Pinboard Importer',
+        id: 'html-import',
+        name: 'Browser HTML Bookmarks',
         version: '1.0.0',
-        description: 'Import bookmarks from Pinboard JSON files.',
+        description: 'Import and export bookmarks, folders, and tags using the standard Netscape HTML bookmarks format used by Chrome, Firefox, Safari, Edge, and Arc.',
         author: 'tessera.community',
-        permissions: ['bookmarks.write', 'tags.write'],
-        ui: { commands: ['import-pinboard'] },
+        permissions: ['bookmarks.read', 'bookmarks.write', 'tags.write'],
+        ui: { commands: ['import-html-file', 'export-html-file'] },
       },
       {
         id: 'markdown-export',
@@ -111,8 +113,14 @@ export const useLibraryStore = () => {
         permissions: ['bookmarks.read', 'tags.read'],
         ui: { commands: ['export-markdown'] },
       },
-    ])
-  );
+    ];
+    for (const d of defaultExts) {
+      if (!filtered.some((e) => e.id === d.id)) {
+        filtered.push(d);
+      }
+    }
+    return filtered;
+  });
 
   // Gist state
   const [gistConfig, setGistConfigState] = useState<GistConfig>(() => engine.getGistConfig());

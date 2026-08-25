@@ -2,14 +2,14 @@ import type { ExtensionManifest } from '@tessera/schemas';
 
 export const officialManifests: ExtensionManifest[] = [
   {
-    id: 'pinboard-import',
-    name: 'Pinboard Importer',
+    id: 'html-import',
+    name: 'Browser HTML Bookmarks',
     version: '1.0.0',
-    description: 'Import your existing bookmarks and tags from Pinboard JSON exports.',
+    description: 'Import and export bookmarks, folders, and tags using the standard Netscape HTML bookmarks format used by Chrome, Firefox, Safari, Edge, and Arc.',
     author: 'tessera.community',
-    permissions: ['bookmarks.write', 'tags.write'],
+    permissions: ['bookmarks.read', 'bookmarks.write', 'tags.write'],
     ui: {
-      commands: ['import-pinboard-file'],
+      commands: ['import-html-file', 'export-html-file'],
     },
   },
   {

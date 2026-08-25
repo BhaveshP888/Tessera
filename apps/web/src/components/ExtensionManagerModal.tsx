@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, Puzzle, Play, CheckCircle, AlertTriangle, ShieldCheck, Download } from 'lucide-react';
-import type { ExtensionManifest, Bookmark, Tag } from '@tessera/schemas';
+import React, { useState, useRef } from 'react';
+import { X, Puzzle, Play, CheckCircle, AlertTriangle, ShieldCheck, Download, Upload, FileCode } from 'lucide-react';
+import type { ExtensionManifest, Bookmark, Tag, Collection } from '@tessera/schemas';
+import { parseNetscapeBookmarksHtml, exportToNetscapeHtml } from '@tessera/extension-html-import';
 
 interface ExtensionManagerModalProps {
   isOpen: boolean;
@@ -8,8 +9,10 @@ interface ExtensionManagerModalProps {
   installedExtensions: ExtensionManifest[];
   bookmarks: Bookmark[];
   tags: Tag[];
+  collections?: Collection[];
   onAddBookmark: (bookmark: any) => void;
   onAddTag: (name: string) => void;
+  onAddCollection?: (name: string, color?: string, description?: string) => any;
   onLogAudit: (
     type: any,
     status: any,
@@ -24,61 +27,130 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
   installedExtensions,
   bookmarks,
   tags,
+  collections = [],
   onAddBookmark,
   onAddTag,
+  onAddCollection,
   onLogAudit,
 }) => {
-  const [activeTab, setActiveTab] = useState<'installed' | 'run'>('installed');
   const [runningExtId, setRunningExtId] = useState<string | null>(null);
   const [executionOutput, setExecutionOutput] = useState<string | null>(null);
   const [importInput, setImportInput] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadedFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        setImportInput(content);
+        setExecutionOutput(`Loaded ${file.name} (${Math.round(file.size / 1024)} KB). Click "Run Import" to process.`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExportHtml = () => {
+    try {
+      const htmlContent = exportToNetscapeHtml(bookmarks, collections);
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tessera_bookmarks_${new Date().toISOString().slice(0, 10)}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      onLogAudit('export_data', 'success', { format: 'netscape_html', count: bookmarks.length });
+      setExecutionOutput(`Successfully exported ${bookmarks.length} bookmark(s) to Netscape HTML format!`);
+    } catch (err) {
+      const msg = (err as Error).message;
+      setExecutionOutput(`Export Error: ${msg}`);
+      onLogAudit('export_data', 'error', { format: 'netscape_html' }, msg);
+    }
+  };
 
   const handleRunExtension = async (ext: ExtensionManifest) => {
     setRunningExtId(ext.id);
     setExecutionOutput(null);
 
     try {
-      if (ext.id === 'pinboard-import') {
+      if (ext.id === 'html-import') {
         if (!importInput.trim()) {
-          setExecutionOutput('Please paste Pinboard JSON into the input box below.');
+          setExecutionOutput('Please upload a bookmarks.html file or paste HTML into the box below.');
           setRunningExtId(null);
           return;
         }
 
-        const data = JSON.parse(importInput);
-        if (!Array.isArray(data)) {
-          throw new Error('Pinboard export must be a JSON array of bookmark objects.');
+        const parsedItems = parseNetscapeBookmarksHtml(importInput);
+        if (!parsedItems || parsedItems.length === 0) {
+          throw new Error('No valid bookmarks found in HTML. Ensure the file was exported from Chrome, Firefox, Safari, or Arc.');
         }
 
         let importedCount = 0;
-        for (const item of data) {
-          if (!item.href && !item.url) continue;
+        let createdCollectionsCount = 0;
+        const collectionCache = new Map<string, string>();
 
-          const itemTags = (item.tags || item.tag || '')
-            .split(' ')
-            .map((t: string) => t.trim().toLowerCase())
-            .filter(Boolean);
+        for (const c of collections) {
+          collectionCache.set(c.name.toLowerCase(), c.id);
+        }
 
-          for (const t of itemTags) {
+        for (const item of parsedItems) {
+          let colId: string | null = null;
+          if (item.collectionName && item.collectionName.trim()) {
+            const cleanCol = item.collectionName.trim();
+            const lowerCol = cleanCol.toLowerCase();
+            if (collectionCache.has(lowerCol)) {
+              colId = collectionCache.get(lowerCol)!;
+            } else if (onAddCollection) {
+              const newCol = onAddCollection(cleanCol);
+              if (newCol && newCol.id) {
+                colId = newCol.id;
+                collectionCache.set(lowerCol, newCol.id);
+                createdCollectionsCount++;
+              }
+            }
+          }
+
+          for (const t of item.tags || []) {
             onAddTag(t);
           }
 
           onAddBookmark({
-            url: item.href || item.url,
-            title: item.description || item.title || item.href,
-            description: item.extended || item.summary || '',
-            tags: itemTags,
-            isFavorite: item.shared === 'no',
-            isPinned: false,
+            url: item.url,
+            title: item.title,
+            description: item.description || '',
+            notes: item.notes || '',
+            tags: item.tags || [],
+            collectionId: colId,
+            faviconUrl: item.faviconUrl || '',
+            isFavorite: item.isFavorite || false,
+            isPinned: item.isPinned || false,
+            isVault: false,
           });
           importedCount++;
         }
 
-        onLogAudit('extension_rpc_executed', 'success', { extensionId: ext.id, importedCount });
-        setExecutionOutput(`Successfully imported ${importedCount} bookmark(s) via ${ext.name}!`);
+        onLogAudit('extension_rpc_executed', 'success', {
+          extensionId: ext.id,
+          importedCount,
+          createdCollectionsCount,
+        });
+
+        setExecutionOutput(
+          `Successfully imported ${importedCount} bookmark(s)${
+            createdCollectionsCount > 0 ? ` into ${createdCollectionsCount} new collection(s)` : ''
+          }!`,
+        );
         setImportInput('');
+        setUploadedFileName(null);
       } else if (ext.id === 'markdown-export') {
         const lines: string[] = [
           `# Tessera Bookmark Library Export`,
@@ -86,7 +158,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
           '',
         ];
 
-        for (const b of (bookmarks || [])) {
+        for (const b of bookmarks || []) {
           const tagStr = (b.tags || []).map((t) => `#${t}`).join(' ');
           lines.push(`- [${b.title}](${b.url}) ${tagStr}`);
           if (b.description) lines.push(`  > ${b.description}`);
@@ -136,7 +208,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
           border: '1px solid var(--border-hover)',
           borderRadius: 'var(--radius-lg)',
           width: '100%',
-          maxWidth: '620px',
+          maxWidth: '640px',
           maxHeight: '85vh',
           display: 'flex',
           flexDirection: 'column',
@@ -161,7 +233,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
             <div>
               <h3 style={{ fontSize: '14.5px', fontWeight: 600 }}>Extension Manager</h3>
               <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Sandboxed plugins with explicit capability gating
+                Native plugins with zero server data leakage
               </p>
             </div>
           </div>
@@ -172,7 +244,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
 
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1 }}>
           {/* Extension Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {installedExtensions.map((ext) => (
               <div
                 key={ext.id}
@@ -183,7 +255,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
                   border: '1px solid var(--border)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px',
+                  gap: '10px',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -196,31 +268,56 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
                         v{ext.version}
                       </span>
                     </div>
-                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.4 }}>
                       {ext.description}
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleRunExtension(ext)}
-                    disabled={runningExtId === ext.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '5px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--surface-hover)',
-                      border: '1px solid var(--border)',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      color: 'var(--text-primary)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Play size={12} />
-                    <span>Run</span>
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {ext.id === 'html-import' && (
+                      <button
+                        onClick={handleExportHtml}
+                        title="Export library to standard HTML"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '5px 10px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--surface-active)',
+                          border: '1px solid var(--border)',
+                          fontSize: '11.5px',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Download size={12} />
+                        <span>Export HTML</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => handleRunExtension(ext)}
+                      disabled={runningExtId === ext.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '5px 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--accent-dim)',
+                        border: '1px solid var(--accent)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--accent-text)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {ext.id === 'html-import' ? <Upload size={12} /> : <Play size={12} />}
+                      <span>{ext.id === 'html-import' ? 'Run Import' : 'Run'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Permissions / Capabilities pills */}
@@ -246,14 +343,48 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
                   ))}
                 </div>
 
-                {/* Pinboard JSON Input if running */}
-                {ext.id === 'pinboard-import' && (
-                  <div style={{ marginTop: '4px' }}>
+                {/* Browser HTML Input & File Upload */}
+                {ext.id === 'html-import' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept=".html,.htm"
+                      onChange={handleFileUpload}
+                      style={{ display: 'none' }}
+                    />
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--surface-hover)',
+                          border: '1px solid var(--border)',
+                          fontSize: '11.5px',
+                          fontWeight: 500,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        <FileCode size={13} />
+                        <span>{uploadedFileName ? `Change file (${uploadedFileName})` : 'Select bookmarks.html file...'}</span>
+                      </button>
+
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        or paste raw Netscape HTML below:
+                      </span>
+                    </div>
+
                     <textarea
                       rows={3}
                       value={importInput}
                       onChange={(e) => setImportInput(e.target.value)}
-                      placeholder='Paste Pinboard JSON export here (e.g. [{"href":"https://...", "description":"..."}])...'
+                      placeholder='Paste Chrome/Firefox/Safari exported HTML here (<!DOCTYPE NETSCAPE-Bookmark-file-1>...)...'
                       style={{
                         width: '100%',
                         padding: '8px 10px',
@@ -283,6 +414,7 @@ export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
                 color: 'var(--accent-text)',
                 fontSize: '12px',
                 fontFamily: 'var(--font-mono)',
+                lineHeight: 1.4,
               }}
             >
               {executionOutput}

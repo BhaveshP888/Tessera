@@ -46,15 +46,15 @@ describe('Schemas', () => {
 
   it('validates extension manifest capabilities', () => {
     const manifest = {
-      id: 'pinboard-import',
-      name: 'Pinboard Importer',
+      id: 'html-import',
+      name: 'Browser HTML Bookmarks',
       version: '1.0.0',
-      description: 'Imports bookmarks from Pinboard export files',
+      description: 'Imports and exports bookmarks in standard Netscape HTML format',
       author: 'tessera.community',
-      permissions: ['bookmarks.write', 'tags.write'],
+      permissions: ['bookmarks.read', 'bookmarks.write', 'tags.write'],
       ui: {
         panel: './panel.html',
-        commands: ['import-from-file'],
+        commands: ['import-html-file', 'export-html-file'],
       },
     };
 

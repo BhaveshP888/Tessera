@@ -21,7 +21,7 @@ A local-first, end-to-end encrypted bookmark manager with a typed extension syst
 │   └── extension/      # Manifest V3 browser extension (service worker, popup, context menus)
 ├── server/             # Fastify zero-knowledge relay, Passkeys (WebAuthn), Reader proxy, Registry
 ├── extensions/
-│   ├── pinboard-import # Reference extension for importing Pinboard exports
+│   ├── html-import     # Standard Netscape HTML browser bookmarks importer & exporter
 │   └── markdown-export # Reference extension for structured Markdown export
 ├── turbo.json          # Turborepo pipeline configuration
 └── package.json        # Bun workspaces
