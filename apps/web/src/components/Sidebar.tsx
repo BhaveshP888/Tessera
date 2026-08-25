@@ -255,9 +255,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* Collections (Dots) */}
-        {(collections || []).map((col, idx) => {
+        {(collections || []).map((col) => {
           const isSelected = selectedCollectionId === col.id && activeSection === 'library';
-          const colColor = getCollectionColor(col.name, idx, col.color);
+          const colColor = getCollectionColor(col.name, col.color);
           return (
             <button
               key={col.id}
@@ -609,9 +609,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          {(collections || []).map((col, idx) => {
+          {(collections || []).map((col) => {
             const isSelected = selectedCollectionId === col.id && activeSection === 'library';
-            const colColor = getCollectionColor(col.name, idx, col.color);
+            const colColor = getCollectionColor(col.name, col.color);
             return (
               <div
                 key={col.id}

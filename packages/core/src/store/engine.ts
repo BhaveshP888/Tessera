@@ -37,16 +37,23 @@ export const COLLECTION_PALETTE = [
   '#d946ef', // Fuchsia
 ];
 
-export function getCollectionColor(collectionNameOrId: string, index?: number, customColor?: string): string {
-  if (customColor && customColor !== '#1e3a5f' && customColor !== '#1e293b' && customColor !== '#0f172a' && customColor !== '#000000') {
+export function getCollectionColor(collectionNameOrId: string, customColor?: string): string {
+  if (
+    customColor &&
+    customColor.startsWith('#') &&
+    customColor !== '#1e3a5f' &&
+    customColor !== '#1e293b' &&
+    customColor !== '#0f172a' &&
+    customColor !== '#000000'
+  ) {
     return customColor;
   }
-  if (typeof index === 'number' && index >= 0) {
-    return COLLECTION_PALETTE[index % COLLECTION_PALETTE.length]!;
-  }
+  const key = (collectionNameOrId || '').trim().toLowerCase();
+  if (!key) return COLLECTION_PALETTE[0]!;
+
   let hash = 0;
-  for (let i = 0; i < (collectionNameOrId || '').length; i++) {
-    hash = (hash << 5) - hash + collectionNameOrId.charCodeAt(i);
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash << 5) - hash + key.charCodeAt(i);
     hash |= 0;
   }
   const idx = Math.abs(hash) % COLLECTION_PALETTE.length;
@@ -477,7 +484,7 @@ export class LocalStoreEngine {
     const existing = this.collections.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
     if (existing) return existing;
 
-    const assignedColor = getCollectionColor(trimmed, this.collections.length, color);
+    const assignedColor = getCollectionColor(trimmed, color);
 
     const newCol: Collection = {
       id: `c-${crypto.randomUUID().slice(0, 8)}`,

@@ -529,7 +529,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                background: getCollectionColor(collection.name, undefined, collection.color),
+                background: getCollectionColor(collection.name, collection.color),
               }}
             />
             <span>{collection.name}</span>

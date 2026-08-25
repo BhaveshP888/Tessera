@@ -152,7 +152,7 @@ export class MutationLog {
       const newCol: Collection = {
         id: `c-${crypto.randomUUID().slice(0, 8)}`,
         name: nameOrId,
-        color: getCollectionColor(nameOrId, collections.length),
+        color: getCollectionColor(nameOrId),
         parentId: null,
         sortOrder: collections.length,
         createdAt: new Date().toISOString(),
