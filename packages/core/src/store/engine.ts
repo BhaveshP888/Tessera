@@ -217,44 +217,57 @@ export class LocalStoreEngine {
   private loadPersistedState(): void {
     const rawBookmarks = this.safeJsonParse<any[]>('bookmarks', []);
     this.bookmarks = Array.isArray(rawBookmarks)
-      ? rawBookmarks.map((b) => {
-          if (b?.isVault) {
-            if (b.ciphertext && b.nonce) {
+      ? rawBookmarks
+          .filter((b) => {
+            // Discard corrupted empty placeholders without url or ciphertext
+            if (
+              b?.isVault &&
+              !b?.url &&
+              (!b?.ciphertext || !b?.nonce) &&
+              b?.title === 'Locked Vault Item'
+            ) {
+              return false;
+            }
+            return true;
+          })
+          .map((b) => {
+            if (b?.isVault) {
+              if (b.ciphertext && b.nonce) {
+                return {
+                  id: b.id,
+                  url: '',
+                  title: 'Locked Vault Item',
+                  description: '',
+                  notes: '',
+                  faviconUrl: '',
+                  previewImageUrl: '',
+                  tags: [],
+                  collectionId: b.collectionId || null,
+                  isVault: true,
+                  isArchived: Boolean(b.isArchived),
+                  isFavorite: Boolean(b.isFavorite),
+                  isPinned: Boolean(b.isPinned),
+                  createdAt: b.createdAt || new Date().toISOString(),
+                  updatedAt: b.updatedAt || new Date().toISOString(),
+                  deletedAt: null,
+                  versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
+                  ciphertext: b.ciphertext,
+                  nonce: b.nonce,
+                };
+              }
+              // If stored in legacy unmasked format, retain fields
               return {
-                id: b.id,
-                url: '',
-                title: 'Locked Vault Item',
-                description: '',
-                notes: '',
-                faviconUrl: '',
-                previewImageUrl: '',
-                tags: [],
-                collectionId: b.collectionId || null,
-                isVault: true,
-                isArchived: Boolean(b.isArchived),
-                isFavorite: Boolean(b.isFavorite),
-                isPinned: Boolean(b.isPinned),
-                createdAt: b.createdAt || new Date().toISOString(),
-                updatedAt: b.updatedAt || new Date().toISOString(),
-                deletedAt: null,
-                versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
-                ciphertext: b.ciphertext,
-                nonce: b.nonce,
+                ...b,
+                versionClock:
+                  b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
               };
             }
-            // If stored in legacy unmasked format, retain fields
             return {
               ...b,
               versionClock:
                 b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
             };
-          }
-          return {
-            ...b,
-            versionClock:
-              b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
-          };
-        })
+          })
       : [];
     this.tags = this.safeJsonParse<Tag[]>('tags', []);
     this.collections = this.safeJsonParse<Collection[]>('collections', []);
@@ -388,6 +401,12 @@ export class LocalStoreEngine {
       return b;
     });
 
+    // Discard any remaining unrecoverable corrupted items that have no URL and no ciphertext
+    this.bookmarks = this.bookmarks.filter(
+      (b) => !(b.isVault && !b.url && b.title === 'Locked Vault Item' && !(b as any).ciphertext),
+    );
+
+    this.persistBookmarks();
     this.notify();
     return true;
   }
