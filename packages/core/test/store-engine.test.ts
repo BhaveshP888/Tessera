@@ -175,4 +175,48 @@ describe('LocalStoreEngine Deep Module', () => {
     // Tag unlinked from bookmark
     expect(engine.getBookmarks()[0]!.tags).toEqual(['papers']);
   });
+
+  it('encrypts vault bookmarks at rest in storage and unseals seamlessly upon unlock', () => {
+    const storage = new MemoryStorageAdapter();
+    const engine1 = new LocalStoreEngine({ storage, deviceId: 'vault-node' });
+
+    // Setup vault with 7-digit PIN
+    const vaultConfig = engine1.vaultSession.setup('1234567');
+
+    // Add sensitive vault bookmark
+    const vb = engine1.addBookmark({
+      url: 'https://proton.me/mail/secret',
+      title: 'Confidential Mailbox',
+      notes: 'Super secret private recovery keys',
+      isVault: true,
+    });
+
+    expect(vb.url).toBe('https://proton.me/mail/secret');
+    expect(vb.title).toBe('Confidential Mailbox');
+
+    // Inspect storage at rest: verify plaintext URL and notes are NOT in storage!
+    const rawStorage = storage.getItem('tessera_v1_bookmarks');
+    expect(rawStorage).toBeDefined();
+    expect(rawStorage!.includes('https://proton.me/mail/secret')).toBe(false);
+    expect(rawStorage!.includes('Super secret private recovery keys')).toBe(false);
+    expect(rawStorage!.includes('ciphertext')).toBe(true);
+
+    // Lock vault
+    engine1.lockVault();
+    expect(engine1.vaultSession.isUnlocked()).toBe(false);
+    expect(engine1.getBookmarks()[0]!.url).toBe('');
+
+    // Re-instantiate engine from storage (simulating page reload while vault is locked)
+    const engine2 = new LocalStoreEngine({ storage, deviceId: 'vault-node' });
+    expect(engine2.getBookmarks().length).toBe(1);
+    expect(engine2.getBookmarks()[0]!.url).toBe('');
+    expect(engine2.getBookmarks()[0]!.title).toBe('Locked Vault Item');
+
+    // Unlock engine2 with 7-digit PIN
+    const unlocked = engine2.unlockVault('1234567', vaultConfig);
+    expect(unlocked).toBe(true);
+    expect(engine2.getBookmarks()[0]!.url).toBe('https://proton.me/mail/secret');
+    expect(engine2.getBookmarks()[0]!.title).toBe('Confidential Mailbox');
+    expect(engine2.getBookmarks()[0]!.notes).toBe('Super secret private recovery keys');
+  });
 });

@@ -213,13 +213,38 @@ export class LocalStoreEngine {
   }
 
   private loadPersistedState(): void {
-    const rawBookmarks = this.safeJsonParse<Bookmark[]>('bookmarks', []);
+    const rawBookmarks = this.safeJsonParse<any[]>('bookmarks', []);
     this.bookmarks = Array.isArray(rawBookmarks)
-      ? rawBookmarks.map((b) => ({
-          ...b,
-          versionClock:
-            b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
-        }))
+      ? rawBookmarks.map((b) => {
+          if (b?.isVault && b?.ciphertext && b?.nonce) {
+            return {
+              id: b.id,
+              url: '',
+              title: 'Locked Vault Item',
+              description: '',
+              notes: '',
+              faviconUrl: '',
+              previewImageUrl: '',
+              tags: [],
+              collectionId: b.collectionId || null,
+              isVault: true,
+              isArchived: Boolean(b.isArchived),
+              isFavorite: Boolean(b.isFavorite),
+              isPinned: Boolean(b.isPinned),
+              createdAt: b.createdAt || new Date().toISOString(),
+              updatedAt: b.updatedAt || new Date().toISOString(),
+              deletedAt: null,
+              versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
+              ciphertext: b.ciphertext,
+              nonce: b.nonce,
+            };
+          }
+          return {
+            ...b,
+            versionClock:
+              b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
+          };
+        })
       : [];
     this.tags = this.safeJsonParse<Tag[]>('tags', []);
     this.collections = this.safeJsonParse<Collection[]>('collections', []);
@@ -231,6 +256,117 @@ export class LocalStoreEngine {
       lastSyncAt: null,
       lastError: null,
     });
+  }
+
+  private persistBookmarks(): void {
+    const isVaultUnlocked = this.vaultSession.isUnlocked();
+    const serialized = this.bookmarks.map((b) => {
+      if (b.isVault) {
+        if (isVaultUnlocked && b.url) {
+          try {
+            const sealed = this.vaultSession.seal(b);
+            return {
+              id: b.id,
+              isVault: true,
+              ciphertext: sealed.ciphertext,
+              nonce: sealed.nonce,
+              createdAt: b.createdAt,
+              updatedAt: b.updatedAt,
+              deletedAt: b.deletedAt || null,
+              isPinned: Boolean(b.isPinned),
+              isFavorite: Boolean(b.isFavorite),
+              isArchived: Boolean(b.isArchived),
+              collectionId: b.collectionId || null,
+              versionClock: b.versionClock || {},
+            };
+          } catch {
+            // Sealing fallback
+          }
+        }
+        if ((b as any).ciphertext && (b as any).nonce) {
+          return {
+            id: b.id,
+            isVault: true,
+            ciphertext: (b as any).ciphertext,
+            nonce: (b as any).nonce,
+            createdAt: b.createdAt,
+            updatedAt: b.updatedAt,
+            deletedAt: b.deletedAt || null,
+            isPinned: Boolean(b.isPinned),
+            isFavorite: Boolean(b.isFavorite),
+            isArchived: Boolean(b.isArchived),
+            collectionId: b.collectionId || null,
+            versionClock: b.versionClock || {},
+          };
+        }
+      }
+      return b;
+    });
+
+    this.persist('bookmarks', serialized);
+  }
+
+  public unlockVault(pin: string, config: any): boolean {
+    const success = this.vaultSession.unlock(pin, config);
+    if (!success) return false;
+
+    this.bookmarks = this.bookmarks.map((b) => {
+      if (b.isVault && (b as any).ciphertext && (b as any).nonce) {
+        const unsealed = this.vaultSession.unseal(
+          (b as any).ciphertext,
+          (b as any).nonce,
+          b.id,
+        );
+        if (unsealed) {
+          return {
+            ...unsealed,
+            isVault: true,
+            isPinned: b.isPinned ?? unsealed.isPinned,
+            isFavorite: b.isFavorite ?? unsealed.isFavorite,
+            isArchived: b.isArchived ?? unsealed.isArchived,
+            collectionId: b.collectionId ?? unsealed.collectionId,
+          };
+        }
+      }
+      return b;
+    });
+
+    this.notify();
+    return true;
+  }
+
+  public lockVault(): void {
+    this.persistBookmarks();
+    this.vaultSession.lock();
+
+    this.bookmarks = this.bookmarks.map((b) => {
+      if (b.isVault) {
+        return {
+          id: b.id,
+          url: '',
+          title: 'Locked Vault Item',
+          description: '',
+          notes: '',
+          faviconUrl: '',
+          previewImageUrl: '',
+          tags: [],
+          collectionId: b.collectionId || null,
+          isVault: true,
+          isArchived: Boolean(b.isArchived),
+          isFavorite: Boolean(b.isFavorite),
+          isPinned: Boolean(b.isPinned),
+          createdAt: b.createdAt,
+          updatedAt: b.updatedAt,
+          deletedAt: b.deletedAt || null,
+          versionClock: b.versionClock || {},
+          ciphertext: (b as any).ciphertext,
+          nonce: (b as any).nonce,
+        };
+      }
+      return b;
+    });
+
+    this.notify();
   }
 
   private persist(key: string, data: unknown): void {
@@ -354,7 +490,7 @@ export class LocalStoreEngine {
     this.pendingDeltas.push(delta);
     this.bookmarks = [updatedBookmark, ...this.bookmarks];
 
-    this.persist('bookmarks', this.bookmarks);
+    this.persistBookmarks();
     this.persist('pendingDeltas', this.pendingDeltas);
     this.persist('deletedTombstones', this.mutationLog.getTombstones());
     this.notify();
@@ -402,7 +538,7 @@ export class LocalStoreEngine {
     ];
 
     this.pendingDeltas.push(delta);
-    this.persist('bookmarks', this.bookmarks);
+    this.persistBookmarks();
     this.persist('pendingDeltas', this.pendingDeltas);
     this.notify();
     this.triggerGistAutoBackup();
@@ -430,7 +566,7 @@ export class LocalStoreEngine {
     this.bookmarks = this.bookmarks.filter((item) => item.id !== id);
     this.pendingDeltas.push(delta);
 
-    this.persist('bookmarks', this.bookmarks);
+    this.persistBookmarks();
     this.persist('pendingDeltas', this.pendingDeltas);
     this.persist('deletedTombstones', this.mutationLog.getTombstones());
     this.notify();
@@ -871,7 +1007,7 @@ export class LocalStoreEngine {
         }
       }
 
-      this.persist('bookmarks', this.bookmarks);
+      this.persistBookmarks();
       this.persist('collections', this.collections);
       this.persist('tags', this.tags);
       this.persist('deletedTombstones', this.mutationLog.getTombstones());

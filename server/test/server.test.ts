@@ -80,13 +80,26 @@ describe('Server Relay & Proxy', () => {
   it('extracts metadata and handles tracking params and ssrf blocking', async () => {
     const app = await buildServer();
 
-    // SSRF block test
-    const ssrfRes = await app.inject({
-      method: 'POST',
-      url: '/api/proxy/metadata',
-      payload: { url: 'http://127.0.0.1:8080/admin' },
-    });
-    expect(ssrfRes.statusCode).toBe(400);
+    // SSRF block tests (standard, decimal IP, hex IP, cloud metadata, IPv6)
+    const blockedUrls = [
+      'http://127.0.0.1:8080/admin',
+      'http://localhost:3000',
+      'http://2130706433/secret',
+      'http://0x7f000001/status',
+      'http://169.254.169.254/latest/meta-data/',
+      'http://[::1]:8080/metrics',
+      'http://10.0.0.1/router',
+      'http://192.168.1.1/config',
+    ];
+
+    for (const blockedUrl of blockedUrls) {
+      const ssrfRes = await app.inject({
+        method: 'POST',
+        url: '/api/proxy/metadata',
+        payload: { url: blockedUrl },
+      });
+      expect(ssrfRes.statusCode).toBe(400);
+    }
 
     // Clean tracking & public URL metadata extraction
     const validRes = await app.inject({

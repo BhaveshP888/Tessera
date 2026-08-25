@@ -277,7 +277,7 @@ export const useLibraryStore = () => {
 
   const unlockVault = useCallback(
     (pin: string): { success: boolean; error?: string; remainingAttempts?: number; wiped?: boolean } => {
-      const success = engine.vaultSession.unlock(pin, vaultConfig);
+      const success = engine.unlockVault(pin, vaultConfig);
       if (success) {
         setVaultConfig((prev) => {
           const next = { ...prev, failedAttempts: 0 };
@@ -310,7 +310,7 @@ export const useLibraryStore = () => {
   );
 
   const lockVault = useCallback(() => {
-    engine.vaultSession.lock();
+    engine.lockVault();
     setIsVaultUnlocked(false);
     setActiveSection('library');
     logAudit('vault_locked', 'success', {});

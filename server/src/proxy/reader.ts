@@ -51,6 +51,71 @@ export const cleanTrackingParams = (rawUrl: string): string => {
 };
 
 /**
+ * Parses IPv4 address in decimal, hex, octal, or dot-decimal notation into 32-bit integer.
+ */
+export function parseIpv4ToNumber(host: string): number | null {
+  const parts = host.split('.');
+  if (parts.length === 4) {
+    let num = 0;
+    for (let i = 0; i < 4; i++) {
+      const part = parts[i]!;
+      let octet: number;
+      if (/^0x[0-9a-f]+$/i.test(part)) {
+        octet = parseInt(part, 16);
+      } else if (/^0[0-7]+$/.test(part)) {
+        octet = parseInt(part, 8);
+      } else if (/^\d+$/.test(part)) {
+        octet = parseInt(part, 10);
+      } else {
+        return null;
+      }
+      if (octet < 0 || octet > 255) return null;
+      num = (num << 8) | octet;
+    }
+    return num >>> 0;
+  }
+
+  if (/^0x[0-9a-f]+$/i.test(host)) {
+    const n = parseInt(host, 16);
+    return n >= 0 && n <= 0xffffffff ? n >>> 0 : null;
+  }
+  if (/^\d+$/.test(host)) {
+    const n = parseInt(host, 10);
+    return n >= 0 && n <= 0xffffffff ? n >>> 0 : null;
+  }
+  return null;
+}
+
+/**
+ * Checks if a 32-bit IPv4 integer is in a private, loopback, or reserved range.
+ */
+export function isPrivateOrReservedIpv4(ipNum: number): boolean {
+  const b0 = (ipNum >>> 24) & 0xff;
+  const b1 = (ipNum >>> 16) & 0xff;
+
+  // 0.0.0.0/8 (This host)
+  if (b0 === 0) return true;
+  // 127.0.0.0/8 (Loopback)
+  if (b0 === 127) return true;
+  // 10.0.0.0/8 (Private)
+  if (b0 === 10) return true;
+  // 172.16.0.0/12 (Private: 172.16.0.0 - 172.31.255.255)
+  if (b0 === 172 && b1 >= 16 && b1 <= 31) return true;
+  // 192.168.0.0/16 (Private)
+  if (b0 === 192 && b1 === 168) return true;
+  // 169.254.0.0/16 (Link-local & AWS/GCP/Azure instance metadata)
+  if (b0 === 169 && b1 === 254) return true;
+  // 100.64.0.0/10 (Carrier-grade NAT)
+  if (b0 === 100 && b1 >= 64 && b1 <= 127) return true;
+  // 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 (Test-Net)
+  if (b0 === 192 && b1 === 0 && ((ipNum >>> 8) & 0xff) === 2) return true;
+  // 224.0.0.0/4 (Multicast) & 240.0.0.0/4 (Reserved)
+  if (b0 >= 224) return true;
+
+  return false;
+}
+
+/**
  * Validates whether a target URL is safe to fetch (blocks SSRF / private networks).
  */
 export const isSafePublicUrl = (targetUrl: string): boolean => {
@@ -60,35 +125,46 @@ export const isSafePublicUrl = (targetUrl: string): boolean => {
       return false;
     }
 
-    const host = url.hostname.toLowerCase();
+    let host = url.hostname.toLowerCase();
+    if (host.startsWith('[') && host.endsWith(']')) {
+      host = host.slice(1, -1);
+    }
+
     if (
       host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
+      host === '::' ||
       host === '::1' ||
       host.endsWith('.local') ||
       host.endsWith('.internal') ||
-      host.startsWith('10.') ||
-      host.startsWith('192.168.') ||
-      host.startsWith('172.16.') ||
-      host.startsWith('172.17.') ||
-      host.startsWith('172.18.') ||
-      host.startsWith('172.19.') ||
-      host.startsWith('172.20.') ||
-      host.startsWith('172.21.') ||
-      host.startsWith('172.22.') ||
-      host.startsWith('172.23.') ||
-      host.startsWith('172.24.') ||
-      host.startsWith('172.25.') ||
-      host.startsWith('172.26.') ||
-      host.startsWith('172.27.') ||
-      host.startsWith('172.28.') ||
-      host.startsWith('172.29.') ||
-      host.startsWith('172.30.') ||
-      host.startsWith('172.31.') ||
-      host.startsWith('169.254.')
+      host.endsWith('.lan') ||
+      host.endsWith('.home.arpa')
     ) {
       return false;
+    }
+
+    // IPv6 private / link-local / loopback checks
+    if (
+      host.startsWith('fc') ||
+      host.startsWith('fd') ||
+      host.startsWith('fe80:') ||
+      host.startsWith('::ffff:')
+    ) {
+      if (host.startsWith('::ffff:')) {
+        const mappedIp = host.slice(7);
+        const mappedNum = parseIpv4ToNumber(mappedIp);
+        if (mappedNum !== null && isPrivateOrReservedIpv4(mappedNum)) {
+          return false;
+        }
+      }
+      return false;
+    }
+
+    // IPv4 Checks
+    const ipNum = parseIpv4ToNumber(host);
+    if (ipNum !== null) {
+      if (isPrivateOrReservedIpv4(ipNum)) {
+        return false;
+      }
     }
 
     return true;
@@ -216,9 +292,9 @@ export const extractOpenGraphMetadata = (html: string, pageUrl: string): PageMet
 export const fetchPrivacyReaderMetadata = async (
   rawUrl: string,
 ): Promise<{ data: PageMetadata | null; error: string | null }> => {
-  const cleanedUrl = cleanTrackingParams(rawUrl);
+  let currentUrl = cleanTrackingParams(rawUrl);
 
-  if (!isSafePublicUrl(cleanedUrl)) {
+  if (!isSafePublicUrl(currentUrl)) {
     return { data: null, error: 'Invalid or restricted URL' };
   }
 
@@ -226,25 +302,48 @@ export const fetchPrivacyReaderMetadata = async (
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 7000);
 
-    const response = await fetch(cleanedUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-    });
+    let response: Response | null = null;
+    let redirectCount = 0;
+    const maxRedirects = 3;
+
+    while (redirectCount <= maxRedirects) {
+      response = await fetch(currentUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        redirect: 'manual',
+      });
+
+      // Check if redirect response (301, 302, 303, 307, 308)
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        if (!location) break;
+
+        const nextUrl = new URL(location, currentUrl).toString();
+        if (!isSafePublicUrl(nextUrl)) {
+          clearTimeout(timeout);
+          return { data: null, error: 'Restricted redirect destination' };
+        }
+        currentUrl = nextUrl;
+        redirectCount++;
+        continue;
+      }
+
+      break;
+    }
 
     clearTimeout(timeout);
 
-    if (!response.ok) {
-      // Return hostname fallback if upstream 403/404
-      const parsed = new URL(cleanedUrl);
+    if (!response || !response.ok) {
+      // Return hostname fallback if upstream 403/404 or non-ok
+      const parsed = new URL(currentUrl);
       return {
         data: {
-          url: cleanedUrl,
+          url: currentUrl,
           title: parsed.hostname.replace(/^www\./, ''),
           description: '',
           faviconUrl: `https://www.google.com/s2/favicons?domain=${parsed.hostname}&sz=64`,
@@ -255,15 +354,15 @@ export const fetchPrivacyReaderMetadata = async (
     }
 
     const html = await response.text();
-    const metadata = extractOpenGraphMetadata(html, cleanedUrl);
+    const metadata = extractOpenGraphMetadata(html, currentUrl);
     return { data: metadata, error: null };
   } catch {
     // Network / timeout fallback: generate clean domain-level metadata
     try {
-      const parsed = new URL(cleanedUrl);
+      const parsed = new URL(currentUrl);
       return {
         data: {
-          url: cleanedUrl,
+          url: currentUrl,
           title: parsed.hostname.replace(/^www\./, ''),
           description: '',
           faviconUrl: `https://www.google.com/s2/favicons?domain=${parsed.hostname}&sz=64`,
