@@ -8,8 +8,10 @@ import type {
 } from '@tessera/schemas';
 import {
   base64ToUint8Array,
+  deriveRecordKey,
   generateMasterKey,
   uint8ArrayToBase64,
+  unsealRecord,
 } from '../crypto/index.js';
 import { VaultSessionManager } from '../crypto/vault-session.js';
 import {
@@ -216,27 +218,35 @@ export class LocalStoreEngine {
     const rawBookmarks = this.safeJsonParse<any[]>('bookmarks', []);
     this.bookmarks = Array.isArray(rawBookmarks)
       ? rawBookmarks.map((b) => {
-          if (b?.isVault && b?.ciphertext && b?.nonce) {
+          if (b?.isVault) {
+            if (b.ciphertext && b.nonce) {
+              return {
+                id: b.id,
+                url: '',
+                title: 'Locked Vault Item',
+                description: '',
+                notes: '',
+                faviconUrl: '',
+                previewImageUrl: '',
+                tags: [],
+                collectionId: b.collectionId || null,
+                isVault: true,
+                isArchived: Boolean(b.isArchived),
+                isFavorite: Boolean(b.isFavorite),
+                isPinned: Boolean(b.isPinned),
+                createdAt: b.createdAt || new Date().toISOString(),
+                updatedAt: b.updatedAt || new Date().toISOString(),
+                deletedAt: null,
+                versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
+                ciphertext: b.ciphertext,
+                nonce: b.nonce,
+              };
+            }
+            // If stored in legacy unmasked format, retain fields
             return {
-              id: b.id,
-              url: '',
-              title: 'Locked Vault Item',
-              description: '',
-              notes: '',
-              faviconUrl: '',
-              previewImageUrl: '',
-              tags: [],
-              collectionId: b.collectionId || null,
-              isVault: true,
-              isArchived: Boolean(b.isArchived),
-              isFavorite: Boolean(b.isFavorite),
-              isPinned: Boolean(b.isPinned),
-              createdAt: b.createdAt || new Date().toISOString(),
-              updatedAt: b.updatedAt || new Date().toISOString(),
-              deletedAt: null,
-              versionClock: b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
-              ciphertext: b.ciphertext,
-              nonce: b.nonce,
+              ...b,
+              versionClock:
+                b?.versionClock && typeof b.versionClock === 'object' ? b.versionClock : {},
             };
           }
           return {
@@ -262,7 +272,7 @@ export class LocalStoreEngine {
     const isVaultUnlocked = this.vaultSession.isUnlocked();
     const serialized = this.bookmarks.map((b) => {
       if (b.isVault) {
-        if (isVaultUnlocked && b.url) {
+        if (isVaultUnlocked && b.url && b.title !== 'Locked Vault Item') {
           try {
             const sealed = this.vaultSession.seal(b);
             return {
@@ -310,22 +320,69 @@ export class LocalStoreEngine {
     const success = this.vaultSession.unlock(pin, config);
     if (!success) return false;
 
+    const vaultKey = this.vaultSession.getVaultMasterKey();
+
     this.bookmarks = this.bookmarks.map((b) => {
-      if (b.isVault && (b as any).ciphertext && (b as any).nonce) {
-        const unsealed = this.vaultSession.unseal(
-          (b as any).ciphertext,
-          (b as any).nonce,
-          b.id,
-        );
-        if (unsealed) {
-          return {
-            ...unsealed,
-            isVault: true,
-            isPinned: b.isPinned ?? unsealed.isPinned,
-            isFavorite: b.isFavorite ?? unsealed.isFavorite,
-            isArchived: b.isArchived ?? unsealed.isArchived,
-            collectionId: b.collectionId ?? unsealed.collectionId,
-          };
+      if (b.isVault) {
+        // 1. Primary unseal: from bookmark envelope ciphertext
+        if ((b as any).ciphertext && (b as any).nonce) {
+          const unsealed = this.vaultSession.unseal(
+            (b as any).ciphertext,
+            (b as any).nonce,
+            b.id,
+          );
+          if (unsealed) {
+            return {
+              ...unsealed,
+              isVault: true,
+              isPinned: b.isPinned ?? unsealed.isPinned,
+              isFavorite: b.isFavorite ?? unsealed.isFavorite,
+              isArchived: b.isArchived ?? unsealed.isArchived,
+              collectionId: b.collectionId ?? unsealed.collectionId,
+              ciphertext: (b as any).ciphertext,
+              nonce: (b as any).nonce,
+            };
+          }
+        }
+
+        // 2. Recovery unseal: if title is 'Locked Vault Item' or URL missing, look up sync delta
+        if ((!b.url || b.title === 'Locked Vault Item') && vaultKey) {
+          const matchingDelta = this.pendingDeltas.find((d) => d.entityId === b.id);
+          if (matchingDelta) {
+            try {
+              const recordKey = deriveRecordKey(vaultKey, b.id);
+              const unsealed = unsealRecord<Bookmark>(recordKey, matchingDelta.ciphertext, matchingDelta.nonce);
+              if (unsealed?.data) {
+                return {
+                  ...unsealed.data,
+                  isVault: true,
+                  isPinned: b.isPinned ?? unsealed.data.isPinned,
+                  isFavorite: b.isFavorite ?? unsealed.data.isFavorite,
+                  isArchived: b.isArchived ?? unsealed.data.isArchived,
+                  collectionId: b.collectionId ?? unsealed.data.collectionId,
+                  ciphertext: matchingDelta.ciphertext,
+                  nonce: matchingDelta.nonce,
+                };
+              }
+            } catch {}
+
+            try {
+              const masterRecordKey = deriveRecordKey(this.masterKey, b.id);
+              const unsealed = unsealRecord<Bookmark>(masterRecordKey, matchingDelta.ciphertext, matchingDelta.nonce);
+              if (unsealed?.data) {
+                return {
+                  ...unsealed.data,
+                  isVault: true,
+                  isPinned: b.isPinned ?? unsealed.data.isPinned,
+                  isFavorite: b.isFavorite ?? unsealed.data.isFavorite,
+                  isArchived: b.isArchived ?? unsealed.data.isArchived,
+                  collectionId: b.collectionId ?? unsealed.data.collectionId,
+                  ciphertext: matchingDelta.ciphertext,
+                  nonce: matchingDelta.nonce,
+                };
+              }
+            } catch {}
+          }
         }
       }
       return b;
@@ -336,36 +393,46 @@ export class LocalStoreEngine {
   }
 
   public lockVault(): void {
+    // 1. If currently unlocked, seal all in-memory vault items and attach ciphertext/nonce
+    if (this.vaultSession.isUnlocked()) {
+      this.bookmarks = this.bookmarks.map((b) => {
+        if (b.isVault && b.url && b.title !== 'Locked Vault Item') {
+          try {
+            const sealed = this.vaultSession.seal(b);
+            return {
+              id: b.id,
+              url: '',
+              title: 'Locked Vault Item',
+              description: '',
+              notes: '',
+              faviconUrl: '',
+              previewImageUrl: '',
+              tags: [],
+              collectionId: b.collectionId || null,
+              isVault: true,
+              isArchived: Boolean(b.isArchived),
+              isFavorite: Boolean(b.isFavorite),
+              isPinned: Boolean(b.isPinned),
+              createdAt: b.createdAt,
+              updatedAt: b.updatedAt,
+              deletedAt: b.deletedAt || null,
+              versionClock: b.versionClock || {},
+              ciphertext: sealed.ciphertext,
+              nonce: sealed.nonce,
+            };
+          } catch {}
+        }
+        return b;
+      });
+    }
+
+    // 2. Persist sealed state to storage
     this.persistBookmarks();
+
+    // 3. Zero out key from memory
     this.vaultSession.lock();
 
-    this.bookmarks = this.bookmarks.map((b) => {
-      if (b.isVault) {
-        return {
-          id: b.id,
-          url: '',
-          title: 'Locked Vault Item',
-          description: '',
-          notes: '',
-          faviconUrl: '',
-          previewImageUrl: '',
-          tags: [],
-          collectionId: b.collectionId || null,
-          isVault: true,
-          isArchived: Boolean(b.isArchived),
-          isFavorite: Boolean(b.isFavorite),
-          isPinned: Boolean(b.isPinned),
-          createdAt: b.createdAt,
-          updatedAt: b.updatedAt,
-          deletedAt: b.deletedAt || null,
-          versionClock: b.versionClock || {},
-          ciphertext: (b as any).ciphertext,
-          nonce: (b as any).nonce,
-        };
-      }
-      return b;
-    });
-
+    // 4. Notify UI
     this.notify();
   }
 
@@ -487,8 +554,12 @@ export class LocalStoreEngine {
       deviceId: this.deviceId,
     });
 
+    const bookmarkWithEnvelope = isVaultItem
+      ? { ...updatedBookmark, ciphertext: delta.ciphertext, nonce: delta.nonce }
+      : updatedBookmark;
+
     this.pendingDeltas.push(delta);
-    this.bookmarks = [updatedBookmark, ...this.bookmarks];
+    this.bookmarks = [bookmarkWithEnvelope, ...this.bookmarks];
 
     this.persistBookmarks();
     this.persist('pendingDeltas', this.pendingDeltas);
@@ -496,7 +567,7 @@ export class LocalStoreEngine {
     this.notify();
     this.triggerGistAutoBackup();
 
-    return updatedBookmark;
+    return bookmarkWithEnvelope;
   }
 
   public updateBookmark(id: string, input: UpdateBookmarkInput): Bookmark | null {
@@ -531,9 +602,13 @@ export class LocalStoreEngine {
       deviceId: this.deviceId,
     });
 
+    const bookmarkWithEnvelope = updated.isVault
+      ? { ...updatedBookmark, ciphertext: delta.ciphertext, nonce: delta.nonce }
+      : updatedBookmark;
+
     this.bookmarks = [
       ...this.bookmarks.slice(0, existingIndex),
-      updatedBookmark,
+      bookmarkWithEnvelope,
       ...this.bookmarks.slice(existingIndex + 1),
     ];
 
