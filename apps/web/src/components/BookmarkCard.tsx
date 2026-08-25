@@ -7,8 +7,6 @@ import {
   Trash2,
   Copy,
   Check,
-  ChevronDown,
-  ChevronUp,
   Lock,
   Pencil,
 } from 'lucide-react';
@@ -38,7 +36,6 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
   isCompact = false,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
   const collection = (collections || []).find((c) => c && c.id === bookmark.collectionId);
@@ -51,8 +48,8 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
     }
   };
 
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCopy = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     navigator.clipboard.writeText(bookmark.url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
@@ -70,74 +67,74 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
         onMouseLeave={() => setIsHovered(false)}
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          flexDirection: 'column',
           padding: '8px 14px',
           background: isHovered ? 'var(--surface-hover)' : 'var(--surface)',
-          border: `1px solid ${isHovered ? 'var(--border-hover)' : 'var(--border)'}`,
+          border: `1px solid ${bookmark.isPinned ? 'rgba(56, 189, 248, 0.3)' : isHovered ? 'var(--border-hover)' : 'var(--border)'}`,
           borderRadius: 'var(--radius-sm)',
-          gap: '14px',
+          gap: '6px',
           transition: 'all 0.12s ease',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-          <img
-            src={favicon}
-            alt=""
-            style={{ width: '16px', height: '16px', borderRadius: '3px', flexShrink: 0 }}
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-            {bookmark.isVault && <Lock size={12} style={{ color: 'var(--amber)', flexShrink: 0 }} />}
-            {bookmark.isPinned && <Pin size={12} fill="var(--amber)" style={{ color: 'var(--amber)', flexShrink: 0 }} />}
-            <a
-              href={bookmark.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--text-primary)',
-                textDecoration: 'none',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <img
+              src={favicon}
+              alt=""
+              style={{ width: '16px', height: '16px', borderRadius: '3px', flexShrink: 0 }}
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-            >
-              {bookmark.title}
-            </a>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-              {domain}
-            </span>
+            />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+              {bookmark.isVault && <Lock size={12} style={{ color: 'var(--amber)', flexShrink: 0 }} />}
+              {bookmark.isPinned && <Pin size={12} fill="var(--amber)" style={{ color: 'var(--amber)', flexShrink: 0 }} />}
+              <a
+                href={bookmark.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: 'var(--text-primary)',
+                  textDecoration: 'none',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+              >
+                {bookmark.title}
+              </a>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                {domain}
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* Tags & Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          {(bookmark.tags || []).slice(0, 2).map((tag) => (
-            <button
-              key={tag}
-              onClick={() => onSelectTag(tag)}
-              style={{
-                fontSize: '10.5px',
-                fontFamily: 'var(--font-mono)',
-                padding: '2px 6px',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--accent-dim)',
-                color: 'var(--accent-text)',
-              }}
-            >
-              #{tag}
-            </button>
-          ))}
+          {/* Tags & Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            {(bookmark.tags || []).slice(0, 2).map((tag) => (
+              <button
+                key={tag}
+                onClick={() => onSelectTag(tag)}
+                style={{
+                  fontSize: '10.5px',
+                  fontFamily: 'var(--font-mono)',
+                  padding: '2px 6px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--accent-dim)',
+                  color: 'var(--accent-text)',
+                }}
+              >
+                #{tag}
+              </button>
+            ))}
 
-          {/* Quick Actions (Hover) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: isHovered ? 1 : 0.75, transition: 'opacity 0.15s ease', zIndex: 5 }}>
+            {/* Quick Actions (Hover) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: isHovered ? 1 : 0.75, transition: 'opacity 0.15s ease', zIndex: 5 }}>
             <button
               type="button"
               onClick={(e) => {
@@ -224,6 +221,28 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
             </button>
           </div>
         </div>
+      </div>
+
+        {/* Notes in compact row */}
+        {bookmark.notes && (
+          <div
+            style={{
+              padding: '5px 10px',
+              background: 'var(--surface-elevated)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '11px',
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.4,
+              borderLeft: '2px solid var(--accent)',
+              wordBreak: 'break-word',
+              marginLeft: '26px',
+            }}
+          >
+            {bookmark.notes}
+          </div>
+        )}
       </div>
     );
   }
@@ -441,42 +460,24 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
         )}
       </div>
 
-      {/* Notes Drawer */}
+      {/* Always Visible Notes */}
       {bookmark.notes && (
-        <div style={{ marginTop: '1px' }}>
-          <button
-            onClick={() => setShowNotes(!showNotes)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '10.5px',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            <span>Notes</span>
-            {showNotes ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-          </button>
-
-          {showNotes && (
-            <div
-              style={{
-                marginTop: '5px',
-                padding: '7px 9px',
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '11px',
-                color: 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                whiteSpace: 'pre-wrap',
-                lineHeight: 1.4,
-                borderLeft: '2px solid var(--accent)',
-              }}
-            >
-              {bookmark.notes}
-            </div>
-          )}
+        <div
+          style={{
+            marginTop: '2px',
+            padding: '7px 10px',
+            background: 'var(--surface-elevated)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '11.5px',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.45,
+            borderLeft: '2px solid var(--accent)',
+            wordBreak: 'break-word',
+          }}
+        >
+          {bookmark.notes}
         </div>
       )}
 
