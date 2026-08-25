@@ -1,6 +1,7 @@
 import type { Bookmark, Collection, SyncDelta, Tag } from '@tessera/schemas';
 import { deriveRecordKey, sealRecord, unsealRecord } from '../crypto/index.js';
 import { incrementVectorClock, reconcileBookmark } from '../sync/index.js';
+import { getCollectionColor } from './engine.js';
 
 export interface ReconcileParams {
   deltas: SyncDelta[];
@@ -151,7 +152,7 @@ export class MutationLog {
       const newCol: Collection = {
         id: `c-${crypto.randomUUID().slice(0, 8)}`,
         name: nameOrId,
-        color: '#1e3a5f',
+        color: getCollectionColor(nameOrId, collections.length),
         parentId: null,
         sortOrder: collections.length,
         createdAt: new Date().toISOString(),

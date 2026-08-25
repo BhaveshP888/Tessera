@@ -22,6 +22,37 @@ import { RelayHttpTransport, type SyncTransport } from '../sync/transport.js';
 
 export type { GistConfig };
 
+export const COLLECTION_PALETTE = [
+  '#38bdf8', // Sky Blue
+  '#f59e0b', // Amber
+  '#ec4899', // Pink / Rose
+  '#10b981', // Emerald
+  '#a855f7', // Violet
+  '#f97316', // Orange
+  '#06b6d4', // Teal
+  '#6366f1', // Indigo
+  '#ef4444', // Coral / Red
+  '#14b8a6', // Turquoise
+  '#eab308', // Yellow
+  '#d946ef', // Fuchsia
+];
+
+export function getCollectionColor(collectionNameOrId: string, index?: number, customColor?: string): string {
+  if (customColor && customColor !== '#1e3a5f' && customColor !== '#1e293b' && customColor !== '#0f172a' && customColor !== '#000000') {
+    return customColor;
+  }
+  if (typeof index === 'number' && index >= 0) {
+    return COLLECTION_PALETTE[index % COLLECTION_PALETTE.length]!;
+  }
+  let hash = 0;
+  for (let i = 0; i < (collectionNameOrId || '').length; i++) {
+    hash = (hash << 5) - hash + collectionNameOrId.charCodeAt(i);
+    hash |= 0;
+  }
+  const idx = Math.abs(hash) % COLLECTION_PALETTE.length;
+  return COLLECTION_PALETTE[idx]!;
+}
+
 export interface IStorageAdapter {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -441,15 +472,17 @@ export class LocalStoreEngine {
     return true;
   }
 
-  public addCollection(name: string, color = '#1e3a5f', parentId: string | null = null): Collection {
+  public addCollection(name: string, color?: string, parentId: string | null = null): Collection {
     const trimmed = name.trim();
     const existing = this.collections.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
     if (existing) return existing;
 
+    const assignedColor = getCollectionColor(trimmed, this.collections.length, color);
+
     const newCol: Collection = {
       id: `c-${crypto.randomUUID().slice(0, 8)}`,
       name: trimmed,
-      color,
+      color: assignedColor,
       parentId,
       sortOrder: this.collections.length,
       createdAt: new Date().toISOString(),

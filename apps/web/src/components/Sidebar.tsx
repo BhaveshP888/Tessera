@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Collection, Tag } from '@tessera/schemas';
+import { getCollectionColor } from '@tessera/core';
 
 interface SidebarProps {
   viewFilter: 'all' | 'favorites' | 'archived' | 'pinned';
@@ -254,8 +255,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* Collections (Dots) */}
-        {(collections || []).map((col) => {
+        {(collections || []).map((col, idx) => {
           const isSelected = selectedCollectionId === col.id && activeSection === 'library';
+          const colColor = getCollectionColor(col.name, idx, col.color);
           return (
             <button
               key={col.id}
@@ -282,7 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   width: isSelected ? '10px' : '8px',
                   height: isSelected ? '10px' : '8px',
                   borderRadius: '50%',
-                  background: col.color || 'var(--accent)',
+                  background: colColor,
                   border: isSelected ? '2px solid var(--text-primary)' : 'none',
                   transition: 'all 0.15s ease',
                 }}
@@ -607,8 +609,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          {(collections || []).map((col) => {
+          {(collections || []).map((col, idx) => {
             const isSelected = selectedCollectionId === col.id && activeSection === 'library';
+            const colColor = getCollectionColor(col.name, idx, col.color);
             return (
               <div
                 key={col.id}
@@ -645,7 +648,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       width: '7px',
                       height: '7px',
                       borderRadius: '50%',
-                      background: col.color || 'var(--accent)',
+                      background: colColor,
                       flexShrink: 0,
                     }}
                   />

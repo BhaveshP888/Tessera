@@ -11,6 +11,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import type { Bookmark, Collection } from '@tessera/schemas';
+import { getCollectionColor } from '@tessera/core';
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -528,7 +529,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                background: collection.color || 'var(--accent)',
+                background: getCollectionColor(collection.name, undefined, collection.color),
               }}
             />
             <span>{collection.name}</span>
