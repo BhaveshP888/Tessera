@@ -94,21 +94,17 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Brand & Sidebar Toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div
+          <img
+            src="/icon.png"
+            alt="Tessera"
             style={{
               width: '28px',
               height: '28px',
               borderRadius: '7px',
-              background: 'var(--surface-elevated)',
-              border: '1px solid var(--border-hover)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent)',
+              objectFit: 'contain',
+              display: 'block',
             }}
-          >
-            <span style={{ fontSize: '15px', fontWeight: 800 }}>T</span>
-          </div>
+          />
           <span style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>
             Tessera
           </span>
