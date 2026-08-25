@@ -589,6 +589,13 @@ export const useLibraryStore = () => {
       : filteredBookmarks;
   }, [filteredBookmarks, searchQuery]);
 
+  const handleSetActiveSection = useCallback((section: 'library' | 'vault') => {
+    setActiveSection(section);
+    setSelectedCollectionId(null);
+    setSelectedTag(null);
+    setSearchQuery('');
+  }, []);
+
   return {
     bookmarks: isViewingVault && !isVaultUnlocked ? [] : displayBookmarks,
     allBookmarksCount: bookmarks.filter((b) => !b.deletedAt && !b.isArchived && !b.isVault).length,
@@ -610,7 +617,7 @@ export const useLibraryStore = () => {
     vaultConfig,
     isVaultUnlocked,
     gistConfig,
-    setActiveSection,
+    setActiveSection: handleSetActiveSection,
     setSearchQuery,
     setSelectedTag,
     setSelectedCollectionId,

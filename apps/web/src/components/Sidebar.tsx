@@ -93,6 +93,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleVaultClick = () => {
     onSelectSection('vault');
+    onSelectView('all');
+    onSelectCollection(null);
+    onSelectTag(null);
     if (!isVaultConfigured) {
       onOpenVaultSettingsModal();
     } else if (!isVaultUnlocked) {

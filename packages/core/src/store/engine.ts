@@ -875,7 +875,7 @@ export class LocalStoreEngine {
         pulledCount = result.pulledCount;
         this.syncCursor = pullRes.nextCursor;
 
-        this.persist('bookmarks', this.bookmarks);
+        this.persistBookmarks();
         this.persist('collections', this.collections);
         this.persist('tags', this.tags);
         this.persist('deletedTombstones', this.mutationLog.getTombstones());
