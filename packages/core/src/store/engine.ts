@@ -242,6 +242,10 @@ export class LocalStoreEngine {
     return this.syncCursor;
   }
 
+  public getIsSyncing(): boolean {
+    return this.isSyncing;
+  }
+
   public getSyncServerUrl(): string {
     return this.relayTransport.getServerUrl();
   }
