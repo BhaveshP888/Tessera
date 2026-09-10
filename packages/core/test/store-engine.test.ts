@@ -180,8 +180,11 @@ describe('LocalStoreEngine Deep Module', () => {
     const storage = new MemoryStorageAdapter();
     const engine1 = new LocalStoreEngine({ storage, deviceId: 'vault-node' });
 
-    // Setup vault with 7-digit PIN
-    const vaultConfig = engine1.vaultSession.setup('1234567');
+    // Setup vault with 7-digit PIN directly through engine seam
+    const setupRes = engine1.setupVault('1234567');
+    expect(setupRes.success).toBe(true);
+    expect(engine1.isVaultUnlocked()).toBe(true);
+    expect(engine1.getVaultConfig().isConfigured).toBe(true);
 
     // Add sensitive vault bookmark
     const vb = engine1.addBookmark({
@@ -201,9 +204,14 @@ describe('LocalStoreEngine Deep Module', () => {
     expect(rawStorage!.includes('Super secret private recovery keys')).toBe(false);
     expect(rawStorage!.includes('ciphertext')).toBe(true);
 
+    // Verify vaultConfig is persisted in storage
+    const rawVaultConfig = storage.getItem('tessera_v1_vaultConfig');
+    expect(rawVaultConfig).toBeDefined();
+    expect(JSON.parse(rawVaultConfig!).isConfigured).toBe(true);
+
     // Lock vault
     engine1.lockVault();
-    expect(engine1.vaultSession.isUnlocked()).toBe(false);
+    expect(engine1.isVaultUnlocked()).toBe(false);
     expect(engine1.getBookmarks()[0]!.url).toBe('');
 
     // Re-instantiate engine from storage (simulating page reload while vault is locked)
@@ -211,12 +219,60 @@ describe('LocalStoreEngine Deep Module', () => {
     expect(engine2.getBookmarks().length).toBe(1);
     expect(engine2.getBookmarks()[0]!.url).toBe('');
     expect(engine2.getBookmarks()[0]!.title).toBe('Locked Vault Item');
+    expect(engine2.getVaultConfig().isConfigured).toBe(true);
 
-    // Unlock engine2 with 7-digit PIN
-    const unlocked = engine2.unlockVault('1234567', vaultConfig);
-    expect(unlocked).toBe(true);
+    // Test incorrect PIN unlocks fail and decrement remaining attempts
+    const wrongResult = engine2.unlockVault('0000000');
+    expect(wrongResult.success).toBe(false);
+    if (!wrongResult.success) {
+      expect(wrongResult.remainingAttempts).toBe(4);
+      expect(wrongResult.wiped).toBe(false);
+    }
+    expect(engine2.getVaultConfig().failedAttempts).toBe(1);
+
+    // Unlock engine2 with valid 7-digit PIN (no external config needed!)
+    const unlocked = engine2.unlockVault('1234567');
+    expect(unlocked.success).toBe(true);
+    expect(engine2.isVaultUnlocked()).toBe(true);
+    expect(engine2.getVaultConfig().failedAttempts).toBe(0);
     expect(engine2.getBookmarks()[0]!.url).toBe('https://proton.me/mail/secret');
     expect(engine2.getBookmarks()[0]!.title).toBe('Confidential Mailbox');
     expect(engine2.getBookmarks()[0]!.notes).toBe('Super secret private recovery keys');
+  });
+
+  it('wipes vault data when max failed unlock attempts is reached', () => {
+    const storage = new MemoryStorageAdapter();
+    const engine = new LocalStoreEngine({ storage, deviceId: 'vault-wipe-test' });
+
+    engine.setupVault('1234567');
+    engine.addBookmark({
+      url: 'https://topsecret.org',
+      title: 'Top Secret Document',
+      isVault: true,
+    });
+    engine.lockVault();
+
+    // Fail 4 times
+    for (let i = 0; i < 4; i++) {
+      const res = engine.unlockVault('9999999');
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.wiped).toBe(false);
+        expect(res.remainingAttempts).toBe(4 - i);
+      }
+    }
+
+    // 5th failure triggers auto-wipe
+    const wipeRes = engine.unlockVault('9999999');
+    expect(wipeRes.success).toBe(false);
+    if (!wipeRes.success) {
+      expect(wipeRes.wiped).toBe(true);
+      expect(wipeRes.remainingAttempts).toBe(0);
+    }
+
+    // Vault bookmarks should be removed and vault unconfigured
+    expect(engine.getBookmarks().length).toBe(0);
+    expect(engine.getVaultConfig().isConfigured).toBe(false);
+    expect(engine.isVaultUnlocked()).toBe(false);
   });
 });

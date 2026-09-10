@@ -16,20 +16,10 @@ import {
   base64ToUint8Array,
   type GistConfig,
   type FullBackupPayload,
+  type VaultUnlockResult,
 } from '@tessera/core';
 
 const STORAGE_PREFIX = 'tessera_v1_';
-
-const defaultVaultConfig: VaultConfig = {
-  isConfigured: false,
-  pinSalt: '',
-  pinHash: '',
-  wipeAfterAttempts: 5,
-  failedAttempts: 0,
-  isSyncEnabled: false,
-  encryptedVaultKeyWithPin: '',
-  autoLockTimeoutMinutes: 5,
-};
 
 const safeJsonParse = <T>(key: string, fallback: T): T => {
   try {
@@ -158,9 +148,7 @@ export interface LibraryState {
     autoLockMinutes?: number,
   ) => { success: boolean; error?: string };
   wipeVaultData: () => void;
-  unlockVault: (
-    pin: string,
-  ) => { success: boolean; error?: string; remainingAttempts?: number; wiped?: boolean };
+  unlockVault: (pin: string) => VaultUnlockResult;
   lockVault: () => void;
   enableVaultSync: (passphrase: string) => { success: boolean; error?: string };
   disableVaultSync: () => void;
@@ -169,9 +157,9 @@ export interface LibraryState {
   performSync: (
     forceFullPush?: boolean,
   ) => Promise<{ success: boolean; pulledCount?: number; pushedCount?: number; error?: string }>;
-  exportFullBackup: () => FullBackupPayload & { vaultConfig?: VaultConfig };
+  exportFullBackup: () => FullBackupPayload;
   restoreFullBackup: (
-    backup: FullBackupPayload & { vaultConfig?: VaultConfig },
+    backup: FullBackupPayload,
   ) => Promise<{ success: boolean; restoredCount: number; error?: string }>;
   setGistConfig: (updates: Partial<GistConfig>) => GistConfig | undefined;
   backupToGist: () => Promise<{ success: boolean; gistId?: string; error?: string }>;
@@ -202,8 +190,8 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   viewFilter: 'all',
   activeSection: 'library',
 
-  vaultConfig: safeJsonParse(`${STORAGE_PREFIX}vaultConfig`, defaultVaultConfig),
-  isVaultUnlocked: engine.vaultSession.isUnlocked(),
+  vaultConfig: engine.getVaultConfig(),
+  isVaultUnlocked: engine.isVaultUnlocked(),
 
   auditLogs: safeJsonParse(`${STORAGE_PREFIX}auditLogs`, []),
   installedExtensions: initialInstalledExtensions,
@@ -243,110 +231,80 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   },
 
   setupVault: (pin, wipeAfterAttempts = 5, autoLockMinutes = 5) => {
-    try {
-      const masterKeyBytes = base64ToUint8Array(engine.getMasterKeyBase64());
-      const config = engine.vaultSession.setup(pin, undefined, masterKeyBytes);
-      config.wipeAfterAttempts = wipeAfterAttempts;
-      config.autoLockTimeoutMinutes = autoLockMinutes;
-      localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(config));
-      set({ vaultConfig: config, isVaultUnlocked: true });
+    const res = engine.setupVault(pin, wipeAfterAttempts, autoLockMinutes);
+    if (res.success) {
+      set({ vaultConfig: engine.getVaultConfig(), isVaultUnlocked: true });
       get().logAudit('vault_setup', 'success', {});
-      return { success: true };
-    } catch (err) {
-      get().logAudit('vault_setup', 'error', {}, (err as Error).message);
-      return { success: false, error: (err as Error).message };
+    } else {
+      get().logAudit('vault_setup', 'error', {}, res.error);
     }
+    return res;
   },
 
   restoreVaultFromSync: (passphrase, pin, wipeAfterAttempts = 5, autoLockMinutes = 5) => {
-    try {
-      const masterKeyBytes = base64ToUint8Array(engine.getMasterKeyBase64());
-      const config = engine.vaultSession.restoreFromSync(passphrase, masterKeyBytes, pin);
-      config.wipeAfterAttempts = wipeAfterAttempts;
-      config.autoLockTimeoutMinutes = autoLockMinutes;
-      localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(config));
-      set({ vaultConfig: config, isVaultUnlocked: true });
+    const res = engine.restoreVaultFromSync(passphrase, pin, wipeAfterAttempts, autoLockMinutes);
+    if (res.success) {
+      set({ vaultConfig: engine.getVaultConfig(), isVaultUnlocked: true });
       get().logAudit('vault_unlocked', 'success', { source: 'sync_restore' });
-      return { success: true };
-    } catch (err) {
-      get().logAudit('vault_unlocked', 'error', {}, (err as Error).message);
-      return { success: false, error: (err as Error).message };
+    } else {
+      get().logAudit('vault_unlocked', 'error', {}, res.error);
     }
+    return res;
   },
 
   wipeVaultData: () => {
-    engine.vaultSession.wipe();
-    const wipedConfig: VaultConfig = {
-      ...defaultVaultConfig,
-      isConfigured: false,
-    };
-    localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(wipedConfig));
-    set({ vaultConfig: wipedConfig, isVaultUnlocked: false });
+    engine.wipeVault();
+    set({
+      vaultConfig: engine.getVaultConfig(),
+      isVaultUnlocked: false,
+      activeSection: 'library',
+    });
     get().logAudit('vault_wiped', 'warning', {});
   },
 
   unlockVault: (pin) => {
-    const { vaultConfig } = get();
-    const success = engine.unlockVault(pin, vaultConfig);
-    if (success) {
-      const nextConfig = { ...vaultConfig, failedAttempts: 0 };
-      localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(nextConfig));
-      set({
-        vaultConfig: nextConfig,
-        isVaultUnlocked: true,
-        activeSection: 'vault',
-      });
+    const res = engine.unlockVault(pin);
+    set({
+      vaultConfig: engine.getVaultConfig(),
+      isVaultUnlocked: engine.isVaultUnlocked(),
+      ...(res.success ? { activeSection: 'vault' as const } : {}),
+    });
+    if (res.success) {
       get().logAudit('vault_unlocked', 'success', {});
-      return { success: true };
+    } else if (res.wiped) {
+      get().logAudit('vault_wiped', 'error', { reason: 'max_failed_attempts_exceeded' });
     } else {
-      const newFailed = (vaultConfig.failedAttempts || 0) + 1;
-      if (newFailed >= vaultConfig.wipeAfterAttempts) {
-        get().wipeVaultData();
-        get().logAudit('vault_wiped', 'error', { reason: 'max_failed_attempts_exceeded' });
-        return {
-          success: false,
-          error: 'Vault permanently wiped due to too many failed attempts.',
-          wiped: true,
-        };
-      } else {
-        const remaining = vaultConfig.wipeAfterAttempts - newFailed;
-        const nextConfig = { ...vaultConfig, failedAttempts: newFailed };
-        localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(nextConfig));
-        set({ vaultConfig: nextConfig });
-        get().logAudit('vault_pin_failed', 'warning', {
-          failedAttempts: newFailed,
-          remainingAttempts: remaining,
-        });
-        return { success: false, error: 'Incorrect 7-digit PIN.', remainingAttempts: remaining };
-      }
+      get().logAudit('vault_pin_failed', 'warning', {
+        remainingAttempts: res.remainingAttempts,
+      });
     }
+    return res;
   },
 
   lockVault: () => {
     engine.lockVault();
-    set({ isVaultUnlocked: false, activeSection: 'library' });
+    set({
+      vaultConfig: engine.getVaultConfig(),
+      isVaultUnlocked: false,
+      activeSection: 'library',
+    });
     get().logAudit('vault_locked', 'success', {});
   },
 
   enableVaultSync: (passphrase) => {
-    try {
-      const { vaultConfig } = get();
-      const masterKeyBytes = base64ToUint8Array(engine.getMasterKeyBase64());
-      const config = engine.vaultSession.enableSync(passphrase, masterKeyBytes, vaultConfig);
-      localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(config));
-      set({ vaultConfig: config });
+    const res = engine.enableVaultSync(passphrase);
+    if (res.success) {
+      set({ vaultConfig: engine.getVaultConfig() });
       get().logAudit('vault_sync_enabled', 'success', {});
-      return { success: true };
-    } catch (err) {
-      get().logAudit('vault_sync_enabled', 'error', {}, (err as Error).message);
-      return { success: false, error: (err as Error).message };
+    } else {
+      get().logAudit('vault_sync_enabled', 'error', {}, res.error);
     }
+    return res;
   },
 
   disableVaultSync: () => {
-    const next = { ...get().vaultConfig, isSyncEnabled: false };
-    localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(next));
-    set({ vaultConfig: next });
+    engine.disableVaultSync();
+    set({ vaultConfig: engine.getVaultConfig() });
     get().logAudit('vault_sync_disabled', 'success', {});
   },
 
@@ -444,19 +402,13 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   },
 
   exportFullBackup: () => {
-    return {
-      ...engine.exportBackup(),
-      vaultConfig: get().vaultConfig,
-    };
+    return engine.exportBackup();
   },
 
   restoreFullBackup: async (backup) => {
     const res = await engine.restoreBackup(backup);
     if (res.success) {
-      if (backup.vaultConfig) {
-        localStorage.setItem(`${STORAGE_PREFIX}vaultConfig`, JSON.stringify(backup.vaultConfig));
-        set({ vaultConfig: backup.vaultConfig });
-      }
+      set({ vaultConfig: engine.getVaultConfig() });
       get().logAudit('master_key_imported', 'success', { backupRestored: true, count: res.restoredCount });
     }
     return res;
@@ -494,16 +446,19 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
 
 // Sync engine events directly into Zustand store
 engine.subscribe(() => {
-  useLibraryStore.setState({
+  const isUnlocked = engine.isVaultUnlocked();
+  useLibraryStore.setState((state) => ({
     bookmarks: engine.getBookmarks(),
     tags: engine.getTags(),
     collections: engine.getCollections(),
     pendingDeltasCount: engine.getPendingDeltasCount(),
     masterKeyBase64: engine.getMasterKeyBase64(),
     isSyncing: engine.getIsSyncing(),
-    isVaultUnlocked: engine.vaultSession.isUnlocked(),
+    isVaultUnlocked: isUnlocked,
+    vaultConfig: engine.getVaultConfig(),
     gistConfig: engine.getGistConfig(),
-  });
+    ...(!isUnlocked && state.activeSection === 'vault' ? { activeSection: 'library' as const } : {}),
+  }));
 });
 
 // Auto-sync with cloud relay on mount, tab focus, and interval

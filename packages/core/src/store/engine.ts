@@ -5,6 +5,7 @@ import type {
   SyncDelta,
   Tag,
   UpdateBookmarkInput,
+  VaultConfig,
 } from '@tessera/schemas';
 import {
   base64ToUint8Array,
@@ -22,7 +23,22 @@ import {
 import { MutationLog } from './mutation-log.js';
 import { RelayHttpTransport, type SyncTransport } from '../sync/transport.js';
 
-export type { GistConfig };
+export type { GistConfig, VaultConfig };
+
+export type VaultUnlockResult =
+  | { success: true }
+  | { success: false; error: string; remainingAttempts: number; wiped: boolean };
+
+export const DEFAULT_VAULT_CONFIG: VaultConfig = {
+  isConfigured: false,
+  pinSalt: '',
+  pinHash: '',
+  wipeAfterAttempts: 5,
+  failedAttempts: 0,
+  isSyncEnabled: false,
+  encryptedVaultKeyWithPin: '',
+  autoLockTimeoutMinutes: 5,
+};
 
 export const COLLECTION_PALETTE = [
   '#38bdf8', // Sky Blue
@@ -129,6 +145,7 @@ export interface FullBackupPayload {
   collections: Collection[];
   tags: Tag[];
   tombstones: Record<string, string>;
+  vaultConfig?: VaultConfig;
 }
 
 /**
@@ -162,6 +179,9 @@ export class LocalStoreEngine {
     lastError: null,
   };
   private gistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private vaultConfig: VaultConfig = { ...DEFAULT_VAULT_CONFIG };
+  private autoLockTimer: ReturnType<typeof setTimeout> | null = null;
 
   public readonly vaultSession = new VaultSessionManager();
   private subscribers = new Set<() => void>();
@@ -279,6 +299,9 @@ export class LocalStoreEngine {
       lastSyncAt: null,
       lastError: null,
     });
+    this.vaultConfig = this.safeJsonParse<VaultConfig>('vaultConfig', {
+      ...DEFAULT_VAULT_CONFIG,
+    });
   }
 
   private persistBookmarks(): void {
@@ -329,10 +352,34 @@ export class LocalStoreEngine {
     this.persist('bookmarks', serialized);
   }
 
-  public unlockVault(pin: string, config: any): boolean {
-    const success = this.vaultSession.unlock(pin, config);
-    if (!success) return false;
+  // --- Private Vault Seam ---
 
+  public getVaultConfig(): VaultConfig {
+    return { ...this.vaultConfig };
+  }
+
+  public isVaultUnlocked(): boolean {
+    return this.vaultSession.isUnlocked();
+  }
+
+  private armAutoLockTimer(): void {
+    this.clearAutoLockTimer();
+    const minutes = this.vaultConfig.autoLockTimeoutMinutes || 5;
+    if (minutes > 0) {
+      this.autoLockTimer = setTimeout(() => {
+        this.lockVault();
+      }, minutes * 60 * 1000);
+    }
+  }
+
+  private clearAutoLockTimer(): void {
+    if (this.autoLockTimer) {
+      clearTimeout(this.autoLockTimer);
+      this.autoLockTimer = null;
+    }
+  }
+
+  private unsealVaultBookmarksInMemory(): void {
     const vaultKey = this.vaultSession.getVaultMasterKey();
 
     this.bookmarks = this.bookmarks.map((b) => {
@@ -407,11 +454,101 @@ export class LocalStoreEngine {
     );
 
     this.persistBookmarks();
+  }
+
+  public setupVault(
+    pin: string,
+    wipeAfterAttempts = 5,
+    autoLockMinutes = 5,
+  ): { success: boolean; error?: string } {
+    try {
+      const config = this.vaultSession.setup(pin, undefined, this.masterKey);
+      config.wipeAfterAttempts = wipeAfterAttempts;
+      config.autoLockTimeoutMinutes = autoLockMinutes;
+      config.failedAttempts = 0;
+      this.vaultConfig = config;
+      this.persist('vaultConfig', this.vaultConfig);
+      this.armAutoLockTimer();
+      this.notify();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  public restoreVaultFromSync(
+    passphrase: string,
+    pin: string,
+    wipeAfterAttempts = 5,
+    autoLockMinutes = 5,
+  ): { success: boolean; error?: string } {
+    try {
+      const config = this.vaultSession.restoreFromSync(passphrase, this.masterKey, pin);
+      config.wipeAfterAttempts = wipeAfterAttempts;
+      config.autoLockTimeoutMinutes = autoLockMinutes;
+      config.failedAttempts = 0;
+      this.vaultConfig = config;
+      this.persist('vaultConfig', this.vaultConfig);
+
+      this.unsealVaultBookmarksInMemory();
+      this.armAutoLockTimer();
+      this.notify();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  public unlockVault(pin: string, externalConfig?: VaultConfig): VaultUnlockResult {
+    const activeConfig = externalConfig || this.vaultConfig;
+    if (!activeConfig.isConfigured) {
+      return {
+        success: false,
+        error: 'Private Vault is not configured.',
+        remainingAttempts: 0,
+        wiped: false,
+      };
+    }
+
+    const success = this.vaultSession.unlock(pin, activeConfig);
+    if (success) {
+      this.vaultConfig = { ...activeConfig, failedAttempts: 0 };
+      this.persist('vaultConfig', this.vaultConfig);
+      this.unsealVaultBookmarksInMemory();
+      this.armAutoLockTimer();
+      this.notify();
+      return { success: true };
+    }
+
+    // Failed attempt calculation and auto-wipe
+    const newFailed = (activeConfig.failedAttempts || 0) + 1;
+    const wipeThreshold = activeConfig.wipeAfterAttempts || 5;
+
+    if (newFailed >= wipeThreshold) {
+      this.wipeVault();
+      return {
+        success: false,
+        error: 'Vault permanently wiped due to too many failed attempts.',
+        remainingAttempts: 0,
+        wiped: true,
+      };
+    }
+
+    const remaining = wipeThreshold - newFailed;
+    this.vaultConfig = { ...activeConfig, failedAttempts: newFailed };
+    this.persist('vaultConfig', this.vaultConfig);
     this.notify();
-    return true;
+    return {
+      success: false,
+      error: 'Incorrect 7-digit PIN.',
+      remainingAttempts: remaining,
+      wiped: false,
+    };
   }
 
   public lockVault(): void {
+    this.clearAutoLockTimer();
+
     // 1. If currently unlocked, seal all in-memory vault items and attach ciphertext/nonce
     if (this.vaultSession.isUnlocked()) {
       this.bookmarks = this.bookmarks.map((b) => {
@@ -452,6 +589,47 @@ export class LocalStoreEngine {
     this.vaultSession.lock();
 
     // 4. Notify UI
+    this.notify();
+  }
+
+  public wipeVault(): void {
+    this.clearAutoLockTimer();
+    this.vaultSession.wipe();
+
+    // Remove all vault bookmarks from memory & mutation log
+    const vaultBookmarks = this.bookmarks.filter((b) => b.isVault);
+    this.bookmarks = this.bookmarks.filter((b) => !b.isVault);
+    this.persistBookmarks();
+
+    for (const b of vaultBookmarks) {
+      this.mutationLog.recordTombstone(b.id);
+    }
+    this.persist('deletedTombstones', this.mutationLog.getTombstones());
+
+    // Reset vault config to unconfigured
+    this.vaultConfig = {
+      ...DEFAULT_VAULT_CONFIG,
+      isConfigured: false,
+    };
+    this.persist('vaultConfig', this.vaultConfig);
+    this.notify();
+  }
+
+  public enableVaultSync(passphrase: string): { success: boolean; error?: string } {
+    try {
+      const config = this.vaultSession.enableSync(passphrase, this.masterKey, this.vaultConfig);
+      this.vaultConfig = config;
+      this.persist('vaultConfig', this.vaultConfig);
+      this.notify();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  public disableVaultSync(): void {
+    this.vaultConfig = { ...this.vaultConfig, isSyncEnabled: false };
+    this.persist('vaultConfig', this.vaultConfig);
     this.notify();
   }
 
@@ -583,6 +761,9 @@ export class LocalStoreEngine {
     this.persistBookmarks();
     this.persist('pendingDeltas', this.pendingDeltas);
     this.persist('deletedTombstones', this.mutationLog.getTombstones());
+    if (isVaultItem && this.vaultSession.isUnlocked()) {
+      this.armAutoLockTimer();
+    }
     this.notify();
     this.triggerGistAutoBackup();
 
@@ -634,6 +815,9 @@ export class LocalStoreEngine {
     this.pendingDeltas.push(delta);
     this.persistBookmarks();
     this.persist('pendingDeltas', this.pendingDeltas);
+    if (updated.isVault && this.vaultSession.isUnlocked()) {
+      this.armAutoLockTimer();
+    }
     this.notify();
     this.triggerGistAutoBackup();
 
@@ -663,6 +847,9 @@ export class LocalStoreEngine {
     this.persistBookmarks();
     this.persist('pendingDeltas', this.pendingDeltas);
     this.persist('deletedTombstones', this.mutationLog.getTombstones());
+    if (b.isVault && this.vaultSession.isUnlocked()) {
+      this.armAutoLockTimer();
+    }
     this.notify();
     this.triggerGistAutoBackup();
 
@@ -945,6 +1132,7 @@ export class LocalStoreEngine {
         collections: this.collections,
         tags: this.tags,
         tombstones: this.mutationLog.getTombstones(),
+        vaultConfig: this.vaultConfig,
       };
 
       const result = await pushEncryptedGistBackup(
@@ -1045,6 +1233,7 @@ export class LocalStoreEngine {
       collections: this.collections,
       tags: this.tags,
       tombstones: this.mutationLog.getTombstones(),
+      vaultConfig: this.vaultConfig,
     };
   }
 
@@ -1101,6 +1290,15 @@ export class LocalStoreEngine {
         }
       }
 
+      // Restore vault configuration if present in payload
+      if (payload.vaultConfig && typeof payload.vaultConfig === 'object') {
+        this.vaultConfig = {
+          ...DEFAULT_VAULT_CONFIG,
+          ...payload.vaultConfig,
+        };
+        this.persist('vaultConfig', this.vaultConfig);
+      }
+
       this.persistBookmarks();
       this.persist('collections', this.collections);
       this.persist('tags', this.tags);
@@ -1111,5 +1309,14 @@ export class LocalStoreEngine {
     } catch (err) {
       return { success: false, restoredCount: 0, error: (err as Error).message };
     }
+  }
+
+  public destroy(): void {
+    this.clearAutoLockTimer();
+    if (this.gistDebounceTimer) {
+      clearTimeout(this.gistDebounceTimer);
+      this.gistDebounceTimer = null;
+    }
+    this.subscribers.clear();
   }
 }
