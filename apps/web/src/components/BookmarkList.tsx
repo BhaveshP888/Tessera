@@ -23,12 +23,12 @@ export const BookmarkList: React.FC<BookmarkListProps> = (props) => {
   const storeFilteredBookmarks = useFilteredBookmarks();
   const storeSearchQuery = useLibraryStore((s) => s.searchQuery);
   const storeViewLayout = useUIStore((s) => s.viewLayout);
-  const storeOpenAddModal = useUIStore((s) => () => s.openAddBookmarkModal(null));
+  const storeOpenAddBookmarkModal = useUIStore((s) => s.openAddBookmarkModal);
 
   const items = props.bookmarks !== undefined ? props.bookmarks : storeFilteredBookmarks;
   const searchQuery = props.searchQuery !== undefined ? props.searchQuery : storeSearchQuery;
   const viewLayout = props.viewLayout || storeViewLayout;
-  const onOpenAddModal = props.onOpenAddModal || storeOpenAddModal;
+  const onOpenAddModal = props.onOpenAddModal || (() => storeOpenAddBookmarkModal(null));
 
   if (items.length === 0) {
     return (
