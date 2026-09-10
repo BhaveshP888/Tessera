@@ -12,29 +12,44 @@ import {
 import type { VaultConfig } from '@tessera/schemas';
 import { isValidPin, isValidSyncPassphrase } from '@tessera/core';
 
-interface VaultSettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  vaultConfig: VaultConfig;
-  isVaultUnlocked: boolean;
-  onSetupVault: (pin: string, wipeAfterAttempts: number, autoLockMinutes: number) => { success: boolean; error?: string };
-  onRestoreVaultFromSync: (passphrase: string, pin: string, wipeAfterAttempts: number, autoLockMinutes: number) => { success: boolean; error?: string };
-  onEnableSync: (passphrase: string) => { success: boolean; error?: string };
-  onDisableSync: () => void;
-  onWipeVault: () => void;
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface VaultSettingsModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  vaultConfig?: VaultConfig;
+  isVaultUnlocked?: boolean;
+  onSetupVault?: (pin: string, wipeAfterAttempts?: number, autoLockMinutes?: number) => { success: boolean; error?: string };
+  onRestoreVaultFromSync?: (passphrase: string, pin: string, wipeAfterAttempts?: number, autoLockMinutes?: number) => { success: boolean; error?: string };
+  onEnableSync?: (passphrase: string) => { success: boolean; error?: string };
+  onDisableSync?: () => void;
+  onWipeVault?: () => void;
 }
 
-export const VaultSettingsModal: React.FC<VaultSettingsModalProps> = ({
-  isOpen,
-  onClose,
-  vaultConfig,
-  isVaultUnlocked,
-  onSetupVault,
-  onRestoreVaultFromSync,
-  onEnableSync,
-  onDisableSync,
-  onWipeVault,
-}) => {
+export const VaultSettingsModal: React.FC<VaultSettingsModalProps> = (props) => {
+  const storeIsOpen = useUIStore((s) => s.activeModal === 'vault-settings');
+  const storeCloseModal = useUIStore((s) => s.closeModal);
+
+  const storeVaultConfig = useLibraryStore((s) => s.vaultConfig);
+  const storeIsVaultUnlocked = useLibraryStore((s) => s.isVaultUnlocked);
+  const storeSetupVault = useLibraryStore((s) => s.setupVault);
+  const storeRestoreVaultFromSync = useLibraryStore((s) => s.restoreVaultFromSync);
+  const storeEnableSync = useLibraryStore((s) => s.enableVaultSync);
+  const storeDisableSync = useLibraryStore((s) => s.disableVaultSync);
+  const storeWipeVault = useLibraryStore((s) => s.wipeVaultData);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const onClose = props.onClose || storeCloseModal;
+  const vaultConfig = props.vaultConfig || storeVaultConfig;
+  const isVaultUnlocked =
+    props.isVaultUnlocked !== undefined ? props.isVaultUnlocked : storeIsVaultUnlocked;
+  const onSetupVault = props.onSetupVault || storeSetupVault;
+  const onRestoreVaultFromSync = props.onRestoreVaultFromSync || storeRestoreVaultFromSync;
+  const onEnableSync = props.onEnableSync || storeEnableSync;
+  const onDisableSync = props.onDisableSync || storeDisableSync;
+  const onWipeVault = props.onWipeVault || storeWipeVault;
+
   const [activeTab, setActiveTab] = useState<'create' | 'restore'>('create');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');

@@ -2,35 +2,33 @@ import React from 'react';
 import { BookmarkCard } from './BookmarkCard.js';
 import type { Bookmark, Collection } from '@tessera/schemas';
 import { Bookmark as BookmarkIcon, Plus } from 'lucide-react';
+import { useFilteredBookmarks, useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
 
-interface BookmarkListProps {
-  bookmarks: Bookmark[];
-  collections: Collection[];
-  onToggleFavorite: (id: string) => void;
-  onTogglePin: (id: string) => void;
-  onToggleArchive: (id: string) => void;
-  onDelete: (id: string) => void;
-  onSelectTag: (tag: string) => void;
+export interface BookmarkListProps {
+  bookmarks?: Bookmark[];
+  collections?: Collection[];
+  onToggleFavorite?: (id: string) => void;
+  onTogglePin?: (id: string) => void;
+  onToggleArchive?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  onSelectTag?: (tag: string) => void;
   onEditBookmark?: (bookmark: Bookmark) => void;
   searchQuery?: string;
   viewLayout?: 'grid' | 'list';
   onOpenAddModal?: () => void;
 }
 
-export const BookmarkList: React.FC<BookmarkListProps> = ({
-  bookmarks = [],
-  collections = [],
-  onToggleFavorite,
-  onTogglePin,
-  onToggleArchive,
-  onDelete,
-  onSelectTag,
-  onEditBookmark,
-  searchQuery,
-  viewLayout = 'grid',
-  onOpenAddModal,
-}) => {
-  const items = Array.isArray(bookmarks) ? bookmarks : [];
+export const BookmarkList: React.FC<BookmarkListProps> = (props) => {
+  const storeFilteredBookmarks = useFilteredBookmarks();
+  const storeSearchQuery = useLibraryStore((s) => s.searchQuery);
+  const storeViewLayout = useUIStore((s) => s.viewLayout);
+  const storeOpenAddModal = useUIStore((s) => () => s.openAddBookmarkModal(null));
+
+  const items = props.bookmarks !== undefined ? props.bookmarks : storeFilteredBookmarks;
+  const searchQuery = props.searchQuery !== undefined ? props.searchQuery : storeSearchQuery;
+  const viewLayout = props.viewLayout || storeViewLayout;
+  const onOpenAddModal = props.onOpenAddModal || storeOpenAddModal;
 
   if (items.length === 0) {
     return (
@@ -100,13 +98,13 @@ export const BookmarkList: React.FC<BookmarkListProps> = ({
           <BookmarkCard
             key={bookmark.id}
             bookmark={bookmark}
-            collections={collections}
-            onToggleFavorite={onToggleFavorite}
-            onTogglePin={onTogglePin}
-            onToggleArchive={onToggleArchive}
-            onDelete={onDelete}
-            onSelectTag={onSelectTag}
-            onEdit={onEditBookmark}
+            collections={props.collections}
+            onToggleFavorite={props.onToggleFavorite}
+            onTogglePin={props.onTogglePin}
+            onToggleArchive={props.onToggleArchive}
+            onDelete={props.onDelete}
+            onSelectTag={props.onSelectTag}
+            onEdit={props.onEditBookmark}
             isCompact={true}
           />
         ))}
@@ -128,13 +126,13 @@ export const BookmarkList: React.FC<BookmarkListProps> = ({
         <BookmarkCard
           key={bookmark.id}
           bookmark={bookmark}
-          collections={collections}
-          onToggleFavorite={onToggleFavorite}
-          onTogglePin={onTogglePin}
-          onToggleArchive={onToggleArchive}
-          onDelete={onDelete}
-          onSelectTag={onSelectTag}
-          onEdit={onEditBookmark}
+          collections={props.collections}
+          onToggleFavorite={props.onToggleFavorite}
+          onTogglePin={props.onTogglePin}
+          onToggleArchive={props.onToggleArchive}
+          onDelete={props.onDelete}
+          onSelectTag={props.onSelectTag}
+          onEdit={props.onEditBookmark}
           isCompact={false}
         />
       ))}

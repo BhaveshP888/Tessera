@@ -15,35 +15,48 @@ import {
 } from 'lucide-react';
 import type { Bookmark } from '@tessera/schemas';
 
-interface CommandPaletteProps {
-  isOpen: boolean;
-  onClose: () => void;
-  bookmarks: Bookmark[];
-  onOpenAddBookmark: () => void;
-  onOpenVault: () => void;
-  onLockVault: () => void;
-  isVaultUnlocked: boolean;
-  onSync: () => void;
-  onOpenKeyModal: () => void;
-  onOpenAuditModal: () => void;
-  onOpenExtensionModal: () => void;
-  onSelectBookmark: (url: string) => void;
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface CommandPaletteProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  bookmarks?: Bookmark[];
+  onOpenAddBookmark?: () => void;
+  onOpenVault?: () => void;
+  onLockVault?: () => void;
+  isVaultUnlocked?: boolean;
+  onSync?: () => void;
+  onOpenKeyModal?: () => void;
+  onOpenAuditModal?: () => void;
+  onOpenExtensionModal?: () => void;
+  onSelectBookmark?: (url: string) => void;
 }
 
-export const CommandPalette: React.FC<CommandPaletteProps> = ({
-  isOpen,
-  onClose,
-  bookmarks,
-  onOpenAddBookmark,
-  onOpenVault,
-  onLockVault,
-  isVaultUnlocked,
-  onSync,
-  onOpenKeyModal,
-  onOpenAuditModal,
-  onOpenExtensionModal,
-  onSelectBookmark,
-}) => {
+export const CommandPalette: React.FC<CommandPaletteProps> = (props) => {
+  const storeIsOpen = useUIStore((s) => s.activeModal === 'command-palette');
+  const storeCloseModal = useUIStore((s) => s.closeModal);
+  const storeOpenModal = useUIStore((s) => s.openModal);
+  const storeOpenAddBookmarkModal = useUIStore((s) => s.openAddBookmarkModal);
+
+  const storeBookmarks = useLibraryStore((s) => s.bookmarks);
+  const storeIsVaultUnlocked = useLibraryStore((s) => s.isVaultUnlocked);
+  const storeLockVault = useLibraryStore((s) => s.lockVault);
+  const storePerformSync = useLibraryStore((s) => s.performSync);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const onClose = props.onClose || storeCloseModal;
+  const bookmarks = props.bookmarks || storeBookmarks;
+  const onOpenAddBookmark = props.onOpenAddBookmark || (() => storeOpenAddBookmarkModal(null));
+  const onOpenVault = props.onOpenVault || (() => storeOpenModal('vault-pin'));
+  const onLockVault = props.onLockVault || storeLockVault;
+  const isVaultUnlocked =
+    props.isVaultUnlocked !== undefined ? props.isVaultUnlocked : storeIsVaultUnlocked;
+  const onSync = props.onSync || (() => storePerformSync());
+  const onOpenKeyModal = props.onOpenKeyModal || (() => storeOpenModal('key'));
+  const onOpenAuditModal = props.onOpenAuditModal || (() => storeOpenModal('audit'));
+  const onOpenExtensionModal = props.onOpenExtensionModal || (() => storeOpenModal('extension'));
+  const onSelectBookmark = props.onSelectBookmark || ((url: string) => window.open(url, '_blank'));
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);

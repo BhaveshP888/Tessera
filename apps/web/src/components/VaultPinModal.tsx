@@ -2,21 +2,32 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Lock, KeyRound, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { isValidPin } from '@tessera/core';
 
-interface VaultPinModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onUnlock: (pin: string) => { success: boolean; error?: string; remainingAttempts?: number; wiped?: boolean };
-  failedAttempts: number;
-  wipeAfterAttempts: number;
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface VaultPinModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  onUnlock?: (pin: string) => { success: boolean; error?: string; remainingAttempts?: number; wiped?: boolean };
+  failedAttempts?: number;
+  wipeAfterAttempts?: number;
 }
 
-export const VaultPinModal: React.FC<VaultPinModalProps> = ({
-  isOpen,
-  onClose,
-  onUnlock,
-  failedAttempts,
-  wipeAfterAttempts,
-}) => {
+export const VaultPinModal: React.FC<VaultPinModalProps> = (props) => {
+  const storeIsOpen = useUIStore((s) => s.activeModal === 'vault-pin');
+  const storeCloseModal = useUIStore((s) => s.closeModal);
+
+  const storeUnlockVault = useLibraryStore((s) => s.unlockVault);
+  const storeFailedAttempts = useLibraryStore((s) => s.vaultConfig.failedAttempts);
+  const storeWipeAfterAttempts = useLibraryStore((s) => s.vaultConfig.wipeAfterAttempts);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const onClose = props.onClose || storeCloseModal;
+  const onUnlock = props.onUnlock || storeUnlockVault;
+  const failedAttempts =
+    props.failedAttempts !== undefined ? props.failedAttempts : storeFailedAttempts;
+  const wipeAfterAttempts =
+    props.wipeAfterAttempts !== undefined ? props.wipeAfterAttempts : storeWipeAfterAttempts;
   const [pinDigits, setPinDigits] = useState<string[]>(Array(7).fill(''));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWiped, setIsWiped] = useState(false);

@@ -16,58 +16,95 @@ import {
 } from 'lucide-react';
 import type { Collection, Tag } from '@tessera/schemas';
 import { getCollectionColor } from '@tessera/core';
+import { useLibraryStore, useBookmarkCounts } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
 
-interface SidebarProps {
-  viewFilter: 'all' | 'favorites' | 'archived' | 'pinned';
-  onSelectView: (view: 'all' | 'favorites' | 'archived' | 'pinned') => void;
-  collections: Collection[];
-  selectedCollectionId: string | null;
-  onSelectCollection: (id: string | null) => void;
-  onAddCollection: (name: string, color?: string) => void;
+export interface SidebarProps {
+  viewFilter?: 'all' | 'favorites' | 'archived' | 'pinned';
+  onSelectView?: (view: 'all' | 'favorites' | 'archived' | 'pinned') => void;
+  collections?: Collection[];
+  selectedCollectionId?: string | null;
+  onSelectCollection?: (id: string | null) => void;
+  onAddCollection?: (name: string, color?: string) => void;
   onDeleteCollection?: (id: string) => void;
-  tags: Tag[];
-  selectedTag: string | null;
-  onSelectTag: (name: string | null) => void;
-  onAddTag: (name: string) => void;
+  tags?: Tag[];
+  selectedTag?: string | null;
+  onSelectTag?: (name: string | null) => void;
+  onAddTag?: (name: string) => void;
   onDeleteTag?: (nameOrId: string) => void;
-  allBookmarksCount: number;
-  vaultBookmarksCount: number;
-  activeSection: 'library' | 'vault';
-  onSelectSection: (section: 'library' | 'vault') => void;
-  isVaultConfigured: boolean;
-  isVaultUnlocked: boolean;
-  onOpenVaultPinModal: () => void;
-  onOpenVaultSettingsModal: () => void;
-  onLockVault: () => void;
-  deviceId: string;
+  allBookmarksCount?: number;
+  vaultBookmarksCount?: number;
+  activeSection?: 'library' | 'vault';
+  onSelectSection?: (section: 'library' | 'vault') => void;
+  isVaultConfigured?: boolean;
+  isVaultUnlocked?: boolean;
+  onOpenVaultPinModal?: () => void;
+  onOpenVaultSettingsModal?: () => void;
+  onLockVault?: () => void;
+  deviceId?: string;
   isCollapsed?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  viewFilter,
-  onSelectView,
-  collections,
-  selectedCollectionId,
-  onSelectCollection,
-  onAddCollection,
-  onDeleteCollection,
-  tags,
-  selectedTag,
-  onSelectTag,
-  onAddTag,
-  onDeleteTag,
-  allBookmarksCount,
-  vaultBookmarksCount,
-  activeSection,
-  onSelectSection,
-  isVaultConfigured,
-  isVaultUnlocked,
-  onOpenVaultPinModal,
-  onOpenVaultSettingsModal,
-  onLockVault,
-  deviceId,
-  isCollapsed = false,
-}) => {
+export const Sidebar: React.FC<SidebarProps> = (props) => {
+  const storeViewFilter = useLibraryStore((s) => s.viewFilter);
+  const storeSetViewFilter = useLibraryStore((s) => s.setViewFilter);
+  const storeCollections = useLibraryStore((s) => s.collections);
+  const storeSelectedCollectionId = useLibraryStore((s) => s.selectedCollectionId);
+  const storeSetSelectedCollectionId = useLibraryStore((s) => s.setSelectedCollectionId);
+  const storeAddCollection = useLibraryStore((s) => s.addCollection);
+  const storeDeleteCollection = useLibraryStore((s) => s.deleteCollection);
+  const storeTags = useLibraryStore((s) => s.tags);
+  const storeSelectedTag = useLibraryStore((s) => s.selectedTag);
+  const storeSetSelectedTag = useLibraryStore((s) => s.setSelectedTag);
+  const storeAddTag = useLibraryStore((s) => s.addTag);
+  const storeDeleteTag = useLibraryStore((s) => s.deleteTag);
+  const { allBookmarksCount: storeAllCount, vaultBookmarksCount: storeVaultCount } =
+    useBookmarkCounts();
+  const storeActiveSection = useLibraryStore((s) => s.activeSection);
+  const storeSetActiveSection = useLibraryStore((s) => s.setActiveSection);
+  const storeIsVaultConfigured = useLibraryStore((s) => s.vaultConfig.isConfigured);
+  const storeIsVaultUnlocked = useLibraryStore((s) => s.isVaultUnlocked);
+  const storeLockVault = useLibraryStore((s) => s.lockVault);
+  const storeDeviceId = useLibraryStore((s) => s.deviceId);
+
+  const storeIsSidebarOpen = useUIStore((s) => s.isSidebarOpen);
+  const storeOpenModal = useUIStore((s) => s.openModal);
+
+  // Fallbacks
+  const isCollapsed =
+    props.isCollapsed !== undefined ? props.isCollapsed : !storeIsSidebarOpen;
+  const viewFilter = props.viewFilter || storeViewFilter;
+  const onSelectView = props.onSelectView || storeSetViewFilter;
+  const collections = props.collections || storeCollections;
+  const selectedCollectionId =
+    props.selectedCollectionId !== undefined
+      ? props.selectedCollectionId
+      : storeSelectedCollectionId;
+  const onSelectCollection = props.onSelectCollection || storeSetSelectedCollectionId;
+  const onAddCollection = props.onAddCollection || storeAddCollection;
+  const onDeleteCollection = props.onDeleteCollection || storeDeleteCollection;
+  const tags = props.tags || storeTags;
+  const selectedTag = props.selectedTag !== undefined ? props.selectedTag : storeSelectedTag;
+  const onSelectTag = props.onSelectTag || storeSetSelectedTag;
+  const onAddTag = props.onAddTag || storeAddTag;
+  const onDeleteTag = props.onDeleteTag || storeDeleteTag;
+  const allBookmarksCount =
+    props.allBookmarksCount !== undefined ? props.allBookmarksCount : storeAllCount;
+  const vaultBookmarksCount =
+    props.vaultBookmarksCount !== undefined ? props.vaultBookmarksCount : storeVaultCount;
+  const activeSection = props.activeSection || storeActiveSection;
+  const onSelectSection = props.onSelectSection || storeSetActiveSection;
+  const isVaultConfigured =
+    props.isVaultConfigured !== undefined ? props.isVaultConfigured : storeIsVaultConfigured;
+  const isVaultUnlocked =
+    props.isVaultUnlocked !== undefined ? props.isVaultUnlocked : storeIsVaultUnlocked;
+  const onOpenVaultPinModal =
+    props.onOpenVaultPinModal || (() => storeOpenModal('vault-pin'));
+  const onOpenVaultSettingsModal =
+    props.onOpenVaultSettingsModal || (() => storeOpenModal('vault-settings'));
+  const onLockVault = props.onLockVault || storeLockVault;
+  const deviceId = props.deviceId || storeDeviceId;
+
   const [isAddingCollection, setIsAddingCollection] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(false);

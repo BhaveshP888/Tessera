@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { X, Globe, Sparkles, Pin, Star, Lock, CheckCircle, AlertCircle, Loader2, Pencil } from 'lucide-react';
 import type { Bookmark, Collection, Tag } from '@tessera/schemas';
 
-interface AddBookmarkModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAdd: (bookmark: {
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface AddBookmarkModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  onAdd?: (bookmark: {
     url: string;
     title: string;
     description?: string;
@@ -32,25 +35,40 @@ interface AddBookmarkModalProps {
     previewImageUrl?: string;
   }) => void;
   bookmarkToEdit?: Bookmark | null;
-  collections: Collection[];
-  tags: Tag[];
-  serverUrl: string;
+  collections?: Collection[];
+  tags?: Tag[];
+  serverUrl?: string;
   isVaultUnlocked?: boolean;
   defaultIsVault?: boolean;
 }
 
-export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = ({
-  isOpen,
-  onClose,
-  onAdd,
-  onUpdate,
-  bookmarkToEdit,
-  collections,
-  tags,
-  serverUrl,
-  isVaultUnlocked = false,
-  defaultIsVault = false,
-}) => {
+export const AddBookmarkModal: React.FC<AddBookmarkModalProps> = (props) => {
+  const storeIsOpen = useUIStore((s) => s.activeModal === 'add');
+  const storeCloseModal = useUIStore((s) => s.closeModal);
+  const storeBookmarkToEdit = useUIStore((s) => s.editingBookmark);
+
+  const storeAddBookmark = useLibraryStore((s) => s.addBookmark);
+  const storeUpdateBookmark = useLibraryStore((s) => s.updateBookmark);
+  const storeCollections = useLibraryStore((s) => s.collections);
+  const storeTags = useLibraryStore((s) => s.tags);
+  const storeServerUrl = useLibraryStore((s) => s.syncServerUrl);
+  const storeIsVaultUnlocked = useLibraryStore((s) => s.isVaultUnlocked);
+  const storeActiveSection = useLibraryStore((s) => s.activeSection);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const onClose = props.onClose || storeCloseModal;
+  const bookmarkToEdit =
+    props.bookmarkToEdit !== undefined ? props.bookmarkToEdit : storeBookmarkToEdit;
+  const onAdd = props.onAdd || storeAddBookmark;
+  const onUpdate = props.onUpdate || storeUpdateBookmark;
+  const collections = props.collections || storeCollections;
+  const tags = props.tags || storeTags;
+  const serverUrl = props.serverUrl || storeServerUrl;
+  const isVaultUnlocked =
+    props.isVaultUnlocked !== undefined ? props.isVaultUnlocked : storeIsVaultUnlocked;
+  const defaultIsVault =
+    props.defaultIsVault !== undefined ? props.defaultIsVault : storeActiveSection === 'vault';
+
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

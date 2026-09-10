@@ -17,35 +17,50 @@ import {
 } from 'lucide-react';
 import type { GistConfig, GistSyncResult } from '@tessera/core';
 
-interface KeyManagementModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  masterKeyBase64: string;
-  onImportKey: (base64Key: string) => { success: boolean; error?: string } | boolean;
-  onExportFullBackup?: () => any;
-  onRestoreFullBackup?: (backup: any) => Promise<{ success: boolean; count?: number; error?: string }>;
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface KeyManagementModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  masterKeyBase64?: string;
+  onImportKey?: (base64Key: string) => { success: boolean; error?: string } | boolean;
+  onExportFullBackup?: () => unknown;
+  onRestoreFullBackup?: (backup: any) => Promise<{ success: boolean; restoredCount?: number; count?: number; error?: string }>;
   onSync?: () => void;
-  onForcePush?: () => Promise<{ pushedCount: number; success: boolean }>;
+  onForcePush?: () => Promise<{ pushedCount?: number; success: boolean }>;
   gistConfig?: GistConfig;
-  onSetGistConfig?: (updates: Partial<GistConfig>) => GistConfig;
-  onBackupToGist?: () => Promise<GistSyncResult>;
-  onRestoreFromGist?: (gistId?: string) => Promise<{ success: boolean; count?: number; error?: string }>;
+  onSetGistConfig?: (updates: Partial<GistConfig>) => GistConfig | undefined;
+  onBackupToGist?: () => Promise<{ success: boolean; gistId?: string; error?: string }>;
+  onRestoreFromGist?: (gistId?: string) => Promise<{ success: boolean; restoredCount?: number; count?: number; error?: string }>;
 }
 
-export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
-  isOpen,
-  onClose,
-  masterKeyBase64,
-  onImportKey,
-  onExportFullBackup,
-  onRestoreFullBackup,
-  onSync,
-  onForcePush,
-  gistConfig,
-  onSetGistConfig,
-  onBackupToGist,
-  onRestoreFromGist,
-}) => {
+export const KeyManagementModal: React.FC<KeyManagementModalProps> = (props) => {
+  const storeIsOpen = useUIStore((s) => s.activeModal === 'key');
+  const storeCloseModal = useUIStore((s) => s.closeModal);
+
+  const storeMasterKeyBase64 = useLibraryStore((s) => s.masterKeyBase64);
+  const storeImportMasterKey = useLibraryStore((s) => s.importMasterKey);
+  const storeExportFullBackup = useLibraryStore((s) => s.exportFullBackup);
+  const storeRestoreFullBackup = useLibraryStore((s) => s.restoreFullBackup);
+  const storePerformSync = useLibraryStore((s) => s.performSync);
+  const storeGistConfig = useLibraryStore((s) => s.gistConfig);
+  const storeSetGistConfig = useLibraryStore((s) => s.setGistConfig);
+  const storeBackupToGist = useLibraryStore((s) => s.backupToGist);
+  const storeRestoreFromGist = useLibraryStore((s) => s.restoreFromGist);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const onClose = props.onClose || storeCloseModal;
+  const masterKeyBase64 = props.masterKeyBase64 || storeMasterKeyBase64;
+  const onImportKey = props.onImportKey || storeImportMasterKey;
+  const onExportFullBackup = props.onExportFullBackup || storeExportFullBackup;
+  const onRestoreFullBackup = props.onRestoreFullBackup || storeRestoreFullBackup;
+  const onSync = props.onSync || (() => storePerformSync(true));
+  const onForcePush = props.onForcePush || (() => storePerformSync(true));
+  const gistConfig = props.gistConfig || storeGistConfig;
+  const onSetGistConfig = props.onSetGistConfig || storeSetGistConfig;
+  const onBackupToGist = props.onBackupToGist || storeBackupToGist;
+  const onRestoreFromGist = props.onRestoreFromGist || storeRestoreFromGist;
   const [copied, setCopied] = useState(false);
   const [importKeyInput, setImportKeyInput] = useState('');
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -117,7 +132,8 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
         if (onRestoreFullBackup && (parsed.bookmarks || parsed.type === 'tessera_full_backup')) {
           const res = await onRestoreFullBackup(parsed);
           if (res.success) {
-            setImportStatus(`Successfully restored ${res.count ?? 'all'} bookmarks and Master Key!`);
+            const restored = ('restoredCount' in res ? res.restoredCount : (res as { count?: number }).count) ?? 'all';
+            setImportStatus(`Successfully restored ${restored} bookmarks and Master Key!`);
           } else {
             setImportStatus(res.error || 'Failed to restore backup file');
           }
@@ -151,7 +167,8 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
         const parsed = JSON.parse(rawInput);
         const res = await onRestoreFullBackup(parsed);
         if (res.success) {
-          setImportStatus(`Successfully restored ${res.count ?? 'all'} bookmarks and Master Key!`);
+          const restored = ('restoredCount' in res ? res.restoredCount : (res as { count?: number }).count) ?? 'all';
+          setImportStatus(`Successfully restored ${restored} bookmarks and Master Key!`);
           setImportKeyInput('');
           return;
         }
@@ -530,7 +547,7 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
                       if (onBackupToGist) {
                         const res = await onBackupToGist();
                         if (res.success) {
-                          setGistStatus(`Backed up ${res.count ?? 'all'} bookmarks to Gist ${res.gistId} successfully!`);
+                          setGistStatus(`Backed up bookmarks to Gist ${res.gistId || ''} successfully!`);
                           if (res.gistId) setGistIdInput(res.gistId);
                         } else {
                           setGistStatus(res.error || 'Failed to push backup to Gist.');
@@ -583,7 +600,8 @@ export const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
                       if (onRestoreFromGist) {
                         const res = await onRestoreFromGist(gistIdInput.trim());
                         if (res.success) {
-                          setGistStatus(`Successfully restored ${res.count ?? 'all'} bookmarks from Gist!`);
+                          const restored = ('restoredCount' in res ? res.restoredCount : (res as { count?: number }).count) ?? 'all';
+                          setGistStatus(`Successfully restored ${restored} bookmarks from Gist!`);
                         } else {
                           setGistStatus(res.error || 'Failed to restore backup from Gist.');
                         }

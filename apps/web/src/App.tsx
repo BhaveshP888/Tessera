@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useLibraryStore } from './store/useLibraryStore.js';
+import React from 'react';
+import { useLibraryStore, useFilteredBookmarks } from './store/useLibraryStore.js';
+import { useUIStore } from './store/useUIStore.js';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar.js';
 import { BookmarkList } from './components/BookmarkList.js';
@@ -10,78 +11,34 @@ import { ExtensionManagerModal } from './components/ExtensionManagerModal.js';
 import { VaultPinModal } from './components/VaultPinModal.js';
 import { VaultSettingsModal } from './components/VaultSettingsModal.js';
 import { CommandPalette } from './components/CommandPalette.js';
-import { Lock, Shield, KeyRound, ArrowRight } from 'lucide-react';
-import type { Bookmark } from '@tessera/schemas';
+import { Lock, Shield, KeyRound } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const store = useLibraryStore();
+  const activeSection = useLibraryStore((s) => s.activeSection);
+  const isVaultConfigured = useLibraryStore((s) => s.vaultConfig.isConfigured);
+  const isVaultUnlocked = useLibraryStore((s) => s.isVaultUnlocked);
+  const lockVault = useLibraryStore((s) => s.lockVault);
+  const selectedTag = useLibraryStore((s) => s.selectedTag);
+  const selectedCollectionId = useLibraryStore((s) => s.selectedCollectionId);
+  const collections = useLibraryStore((s) => s.collections);
+  const viewFilter = useLibraryStore((s) => s.viewFilter);
+  const searchQuery = useLibraryStore((s) => s.searchQuery);
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [viewLayout, setViewLayout] = useState<'grid' | 'list'>('grid');
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
-  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
-  const [isVaultPinModalOpen, setIsVaultPinModalOpen] = useState(false);
-  const [isVaultSettingsModalOpen, setIsVaultSettingsModalOpen] = useState(false);
+  const openModal = useUIStore((s) => s.openModal);
 
-  const isViewingVault = store.activeSection === 'vault';
+  const filteredBookmarks = useFilteredBookmarks();
+  const isViewingVault = activeSection === 'vault';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
-      <Header
-        searchQuery={store.searchQuery}
-        onSearchChange={store.setSearchQuery}
-        onOpenAddModal={() => setIsAddModalOpen(true)}
-        onOpenKeyModal={() => setIsKeyModalOpen(true)}
-        onOpenAuditModal={() => setIsAuditModalOpen(true)}
-        onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
-        onOpenVaultModal={() => setIsVaultPinModalOpen(true)}
-        onOpenVaultSettings={() => setIsVaultSettingsModalOpen(true)}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        isVaultConfigured={store.vaultConfig.isConfigured}
-        isVaultUnlocked={store.isVaultUnlocked}
-        onSync={store.performSync}
-        isSyncing={store.isSyncing}
-        pendingDeltasCount={store.pendingDeltasCount}
-        viewLayout={viewLayout}
-        onToggleLayout={setViewLayout}
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-      />
+      <Header />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Sidebar
-          isCollapsed={!isSidebarOpen}
-          viewFilter={store.viewFilter}
-          onSelectView={store.setViewFilter}
-          collections={store.collections}
-          selectedCollectionId={store.selectedCollectionId}
-          onSelectCollection={store.setSelectedCollectionId}
-          onAddCollection={store.addCollection}
-          onDeleteCollection={store.deleteCollection}
-          tags={store.tags}
-          selectedTag={store.selectedTag}
-          onSelectTag={store.setSelectedTag}
-          onAddTag={store.addTag}
-          onDeleteTag={store.deleteTag}
-          allBookmarksCount={store.allBookmarksCount}
-          vaultBookmarksCount={store.vaultBookmarksCount}
-          activeSection={store.activeSection}
-          onSelectSection={store.setActiveSection}
-          isVaultConfigured={store.vaultConfig.isConfigured}
-          isVaultUnlocked={store.isVaultUnlocked}
-          onOpenVaultPinModal={() => setIsVaultPinModalOpen(true)}
-          onOpenVaultSettingsModal={() => setIsVaultSettingsModalOpen(true)}
-          onLockVault={store.lockVault}
-          deviceId={store.deviceId}
-        />
+        <Sidebar />
 
         <main style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(100vh - 57px)' }}>
           {/* Vault locked hero state */}
-          {isViewingVault && !store.isVaultUnlocked ? (
+          {isViewingVault && !isVaultUnlocked ? (
             <div
               className="animate-fade"
               style={{
@@ -111,17 +68,17 @@ export const App: React.FC = () => {
                 <Lock size={26} />
               </div>
               <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '6px', letterSpacing: '-0.3px' }}>
-                {store.vaultConfig.isConfigured ? 'Private Vault is Locked' : 'Private Vault Not Configured'}
+                {isVaultConfigured ? 'Private Vault is Locked' : 'Private Vault Not Configured'}
               </h2>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '380px', lineHeight: 1.45, marginBottom: '22px' }}>
-                {store.vaultConfig.isConfigured
+                {isVaultConfigured
                   ? 'Enter your 7-digit PIN to decrypt isolated vault bookmarks and notes.'
                   : 'Configure a 7-digit PIN with wipe-after-N protection to store sensitive items.'}
               </p>
               <div>
-                {store.vaultConfig.isConfigured ? (
+                {isVaultConfigured ? (
                   <button
-                    onClick={() => setIsVaultPinModalOpen(true)}
+                    onClick={() => openModal('vault-pin')}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -139,7 +96,7 @@ export const App: React.FC = () => {
                   </button>
                 ) : (
                   <button
-                    onClick={() => setIsVaultSettingsModalOpen(true)}
+                    onClick={() => openModal('vault-settings')}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -174,15 +131,15 @@ export const App: React.FC = () => {
                     <h2 style={{ fontSize: '16px', fontWeight: 600, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>
                       {isViewingVault
                         ? 'Private Vault'
-                        : store.selectedTag
-                          ? `#${store.selectedTag}`
-                          : store.selectedCollectionId
-                            ? store.collections.find((c) => c.id === store.selectedCollectionId)?.name || 'Collection'
-                            : store.viewFilter === 'favorites'
+                        : selectedTag
+                          ? `#${selectedTag}`
+                          : selectedCollectionId
+                            ? collections.find((c) => c.id === selectedCollectionId)?.name || 'Collection'
+                            : viewFilter === 'favorites'
                               ? 'Favorites'
-                              : store.viewFilter === 'pinned'
+                              : viewFilter === 'pinned'
                                 ? 'Pinned'
-                                : store.viewFilter === 'archived'
+                                : viewFilter === 'archived'
                                   ? 'Archive'
                                   : 'All Bookmarks'}
                     </h2>
@@ -203,14 +160,14 @@ export const App: React.FC = () => {
                     )}
                   </div>
                   <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                    {store.bookmarks.length} {store.bookmarks.length === 1 ? 'item' : 'items'}
-                    {store.searchQuery && ` matching "${store.searchQuery}"`}
+                    {filteredBookmarks.length} {filteredBookmarks.length === 1 ? 'item' : 'items'}
+                    {searchQuery && ` matching "${searchQuery}"`}
                   </span>
                 </div>
 
                 {isViewingVault && (
                   <button
-                    onClick={store.lockVault}
+                    onClick={lockVault}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -229,118 +186,20 @@ export const App: React.FC = () => {
                 )}
               </div>
 
-              <BookmarkList
-                bookmarks={store.bookmarks}
-                collections={store.collections}
-                onToggleFavorite={store.toggleFavorite}
-                onTogglePin={store.togglePin}
-                onToggleArchive={store.toggleArchive}
-                onDelete={store.deleteBookmark}
-                onSelectTag={store.setSelectedTag}
-                onEditBookmark={(bookmark) => {
-                  setEditingBookmark(bookmark);
-                  setIsAddModalOpen(true);
-                }}
-                searchQuery={store.searchQuery}
-                viewLayout={viewLayout}
-                onOpenAddModal={() => {
-                  setEditingBookmark(null);
-                  setIsAddModalOpen(true);
-                }}
-              />
+              <BookmarkList />
             </>
           )}
         </main>
       </div>
 
       {/* Modals & Command Palette */}
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        bookmarks={store.bookmarks}
-        onOpenAddBookmark={() => {
-          setEditingBookmark(null);
-          setIsAddModalOpen(true);
-        }}
-        onOpenVault={() => setIsVaultPinModalOpen(true)}
-        onLockVault={store.lockVault}
-        isVaultUnlocked={store.isVaultUnlocked}
-        onSync={store.performSync}
-        onOpenKeyModal={() => setIsKeyModalOpen(true)}
-        onOpenAuditModal={() => setIsAuditModalOpen(true)}
-        onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
-        onSelectBookmark={(url) => window.open(url, '_blank')}
-      />
-
-      <AddBookmarkModal
-        isOpen={isAddModalOpen}
-        onClose={() => {
-          setIsAddModalOpen(false);
-          setEditingBookmark(null);
-        }}
-        onAdd={store.addBookmark}
-        onUpdate={store.updateBookmark}
-        bookmarkToEdit={editingBookmark}
-        collections={store.collections}
-        tags={store.tags}
-        serverUrl={store.syncServerUrl}
-        isVaultUnlocked={store.isVaultUnlocked}
-        defaultIsVault={isViewingVault}
-      />
-
-      <KeyManagementModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-        masterKeyBase64={store.masterKeyBase64}
-        onImportKey={store.importMasterKey}
-        onExportFullBackup={store.exportFullBackup}
-        onRestoreFullBackup={store.restoreFullBackup}
-        onSync={() => store.performSync(true)}
-        onForcePush={() => store.performSync(true)}
-        gistConfig={store.gistConfig}
-        onSetGistConfig={store.setGistConfig}
-        onBackupToGist={store.backupToGist}
-        onRestoreFromGist={store.restoreFromGist}
-      />
-
-      <AuditLogModal
-        isOpen={isAuditModalOpen}
-        onClose={() => setIsAuditModalOpen(false)}
-        auditLogs={store.auditLogs}
-      />
-
-      <ExtensionManagerModal
-        isOpen={isExtensionModalOpen}
-        onClose={() => setIsExtensionModalOpen(false)}
-        installedExtensions={store.installedExtensions}
-        bookmarks={store.bookmarks}
-        tags={store.tags}
-        collections={store.collections}
-        onAddBookmark={store.addBookmark}
-        onAddTag={store.addTag}
-        onAddCollection={store.addCollection}
-        onLogAudit={store.logAudit}
-      />
-
-      <VaultPinModal
-        isOpen={isVaultPinModalOpen}
-        onClose={() => setIsVaultPinModalOpen(false)}
-        onUnlock={store.unlockVault}
-        failedAttempts={store.vaultConfig.failedAttempts}
-        wipeAfterAttempts={store.vaultConfig.wipeAfterAttempts}
-      />
-
-      <VaultSettingsModal
-        isOpen={isVaultSettingsModalOpen}
-        onClose={() => setIsVaultSettingsModalOpen(false)}
-        vaultConfig={store.vaultConfig}
-        isVaultUnlocked={store.isVaultUnlocked}
-        onSetupVault={store.setupVault}
-        onRestoreVaultFromSync={store.restoreVaultFromSync}
-        onEnableSync={store.enableVaultSync}
-        onDisableSync={store.disableVaultSync}
-        onWipeVault={store.wipeVaultData}
-      />
+      <CommandPalette />
+      <AddBookmarkModal />
+      <KeyManagementModal />
+      <AuditLogModal />
+      <ExtensionManagerModal />
+      <VaultPinModal />
+      <VaultSettingsModal />
     </div>
   );
 };

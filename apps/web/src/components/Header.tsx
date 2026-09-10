@@ -6,55 +6,69 @@ import {
   Key,
   Shield,
   Puzzle,
-  Lock,
-  Unlock,
   LayoutGrid,
   List as ListIcon,
   Command,
   PanelLeft,
 } from 'lucide-react';
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
 
-interface HeaderProps {
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  onOpenAddModal: () => void;
-  onOpenKeyModal: () => void;
-  onOpenAuditModal: () => void;
-  onOpenExtensionModal: () => void;
-  onOpenVaultModal: () => void;
-  onOpenVaultSettings: () => void;
-  onOpenCommandPalette: () => void;
-  isVaultConfigured: boolean;
-  isVaultUnlocked: boolean;
-  onSync: () => void;
-  isSyncing: boolean;
-  pendingDeltasCount: number;
-  viewLayout: 'grid' | 'list';
-  onToggleLayout: (layout: 'grid' | 'list') => void;
+export interface HeaderProps {
+  // All props are now optional for backward compatibility
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  onOpenAddModal?: () => void;
+  onOpenKeyModal?: () => void;
+  onOpenAuditModal?: () => void;
+  onOpenExtensionModal?: () => void;
+  onOpenVaultModal?: () => void;
+  onOpenVaultSettings?: () => void;
+  onOpenCommandPalette?: () => void;
+  isVaultConfigured?: boolean;
+  isVaultUnlocked?: boolean;
+  onSync?: () => void;
+  isSyncing?: boolean;
+  pendingDeltasCount?: number;
+  viewLayout?: 'grid' | 'list';
+  onToggleLayout?: (layout: 'grid' | 'list') => void;
   isSidebarOpen?: boolean;
   onToggleSidebar?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  searchQuery,
-  onSearchChange,
-  onOpenAddModal,
-  onOpenKeyModal,
-  onOpenAuditModal,
-  onOpenExtensionModal,
-  onOpenVaultModal,
-  onOpenVaultSettings,
-  onOpenCommandPalette,
-  isVaultConfigured,
-  isVaultUnlocked,
-  onSync,
-  isSyncing,
-  pendingDeltasCount,
-  viewLayout,
-  onToggleLayout,
-  isSidebarOpen = true,
-  onToggleSidebar,
-}) => {
+export const Header: React.FC<HeaderProps> = (props) => {
+  const storeSearchQuery = useLibraryStore((s) => s.searchQuery);
+  const storeSetSearchQuery = useLibraryStore((s) => s.setSearchQuery);
+  const storePerformSync = useLibraryStore((s) => s.performSync);
+  const storeIsSyncing = useLibraryStore((s) => s.isSyncing);
+  const storePendingDeltasCount = useLibraryStore((s) => s.pendingDeltasCount);
+
+  const storeViewLayout = useUIStore((s) => s.viewLayout);
+  const storeSetViewLayout = useUIStore((s) => s.setViewLayout);
+  const storeIsSidebarOpen = useUIStore((s) => s.isSidebarOpen);
+  const storeToggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const storeOpenModal = useUIStore((s) => s.openModal);
+  const storeOpenAddBookmarkModal = useUIStore((s) => s.openAddBookmarkModal);
+
+  // Resolved values (store takes precedence, props used as fallbacks)
+  const searchQuery = props.searchQuery !== undefined ? props.searchQuery : storeSearchQuery;
+  const onSearchChange = props.onSearchChange || storeSetSearchQuery;
+  const isSyncing = props.isSyncing !== undefined ? props.isSyncing : storeIsSyncing;
+  const pendingDeltasCount =
+    props.pendingDeltasCount !== undefined ? props.pendingDeltasCount : storePendingDeltasCount;
+  const viewLayout = props.viewLayout || storeViewLayout;
+  const onToggleLayout = props.onToggleLayout || storeSetViewLayout;
+  const isSidebarOpen = props.isSidebarOpen !== undefined ? props.isSidebarOpen : storeIsSidebarOpen;
+  const onToggleSidebar = props.onToggleSidebar || storeToggleSidebar;
+
+  const onOpenCommandPalette =
+    props.onOpenCommandPalette || (() => storeOpenModal('command-palette'));
+  const onOpenAddModal = props.onOpenAddModal || (() => storeOpenAddBookmarkModal(null));
+  const onOpenKeyModal = props.onOpenKeyModal || (() => storeOpenModal('key'));
+  const onOpenAuditModal = props.onOpenAuditModal || (() => storeOpenModal('audit'));
+  const onOpenExtensionModal = props.onOpenExtensionModal || (() => storeOpenModal('extension'));
+  const onSync = props.onSync || (() => storePerformSync());
+
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Global hotkeys ('/' to focus search, 'Cmd+K' / 'Ctrl+K' for command palette)
@@ -109,41 +123,50 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <span style={{ fontSize: '15px', fontWeight: 800 }}>T</span>
           </div>
-          <span style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>
+          <span
+            style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              letterSpacing: '-0.3px',
+              color: 'var(--text-primary)',
+            }}
+          >
             Tessera
           </span>
         </div>
 
-        {onToggleSidebar && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            title={isSidebarOpen ? 'Collapse to compact sidebar' : 'Expand full sidebar'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '30px',
-              height: '30px',
-              borderRadius: 'var(--radius-sm)',
-              background: isSidebarOpen ? 'var(--surface-hover)' : 'transparent',
-              border: '1px solid var(--border)',
-              color: isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--text-primary)';
-              e.currentTarget.style.background = 'var(--surface-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)';
-              e.currentTarget.style.background = isSidebarOpen ? 'var(--surface-hover)' : 'transparent';
-            }}
-          >
-            <PanelLeft size={15} />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          title={isSidebarOpen ? 'Collapse to compact sidebar' : 'Expand full sidebar'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '30px',
+            height: '30px',
+            borderRadius: 'var(--radius-sm)',
+            background: isSidebarOpen ? 'var(--surface-hover)' : 'transparent',
+            border: '1px solid var(--border)',
+            color: isSidebarOpen ? 'var(--text-primary)' : 'var(--text-muted)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--text-primary)';
+            e.currentTarget.style.background = 'var(--surface-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = isSidebarOpen
+              ? 'var(--text-primary)'
+              : 'var(--text-muted)';
+            e.currentTarget.style.background = isSidebarOpen
+              ? 'var(--surface-hover)'
+              : 'transparent';
+          }}
+        >
+          <PanelLeft size={15} />
+        </button>
       </div>
 
       {/* Center Search / Command Trigger */}

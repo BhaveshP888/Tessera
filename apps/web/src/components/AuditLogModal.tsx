@@ -2,13 +2,24 @@ import React from 'react';
 import { X, Shield, Download } from 'lucide-react';
 import type { AuditEvent } from '@tessera/schemas';
 
-interface AuditLogModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  auditLogs: AuditEvent[];
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface AuditLogModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  auditLogs?: AuditEvent[];
 }
 
-export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, auditLogs = [] }) => {
+export const AuditLogModal: React.FC<AuditLogModalProps> = (props) => {
+  const storeIsOpen = useUIStore((s) => s.activeModal === 'audit');
+  const storeCloseModal = useUIStore((s) => s.closeModal);
+  const storeAuditLogs = useLibraryStore((s) => s.auditLogs);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const onClose = props.onClose || storeCloseModal;
+  const auditLogs = props.auditLogs || storeAuditLogs;
+
   if (!isOpen) return null;
 
   const handleExportLogs = () => {

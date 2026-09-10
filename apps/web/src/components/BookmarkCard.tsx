@@ -13,29 +13,39 @@ import {
 import type { Bookmark, Collection } from '@tessera/schemas';
 import { getCollectionColor } from '@tessera/core';
 
-interface BookmarkCardProps {
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface BookmarkCardProps {
   bookmark: Bookmark;
-  collections: Collection[];
-  onToggleFavorite: (id: string) => void;
-  onTogglePin: (id: string) => void;
-  onToggleArchive: (id: string) => void;
-  onDelete: (id: string) => void;
-  onSelectTag: (tag: string) => void;
+  collections?: Collection[];
+  onToggleFavorite?: (id: string) => void;
+  onTogglePin?: (id: string) => void;
+  onToggleArchive?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  onSelectTag?: (tag: string) => void;
   onEdit?: (bookmark: Bookmark) => void;
   isCompact?: boolean;
 }
 
-export const BookmarkCard: React.FC<BookmarkCardProps> = ({
-  bookmark,
-  collections,
-  onToggleFavorite,
-  onTogglePin,
-  onToggleArchive,
-  onDelete,
-  onSelectTag,
-  onEdit,
-  isCompact = false,
-}) => {
+export const BookmarkCard: React.FC<BookmarkCardProps> = (props) => {
+  const storeCollections = useLibraryStore((s) => s.collections);
+  const storeToggleFavorite = useLibraryStore((s) => s.toggleFavorite);
+  const storeTogglePin = useLibraryStore((s) => s.togglePin);
+  const storeToggleArchive = useLibraryStore((s) => s.toggleArchive);
+  const storeDelete = useLibraryStore((s) => s.deleteBookmark);
+  const storeSetSelectedTag = useLibraryStore((s) => s.setSelectedTag);
+  const storeOpenAddBookmarkModal = useUIStore((s) => s.openAddBookmarkModal);
+
+  const { bookmark, isCompact = false } = props;
+  const collections = props.collections || storeCollections;
+  const onToggleFavorite = props.onToggleFavorite || storeToggleFavorite;
+  const onTogglePin = props.onTogglePin || storeTogglePin;
+  const onToggleArchive = props.onToggleArchive || storeToggleArchive;
+  const onDelete = props.onDelete || storeDelete;
+  const onSelectTag = props.onSelectTag || storeSetSelectedTag;
+  const onEdit = props.onEdit || storeOpenAddBookmarkModal;
+
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 

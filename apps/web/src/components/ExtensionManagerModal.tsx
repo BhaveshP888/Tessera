@@ -3,17 +3,20 @@ import { X, Puzzle, Play, CheckCircle, AlertTriangle, ShieldCheck, Download, Upl
 import type { ExtensionManifest, Bookmark, Tag, Collection } from '@tessera/schemas';
 import { parseNetscapeBookmarksHtml, exportToNetscapeHtml } from '@tessera/extension-html-import';
 
-interface ExtensionManagerModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  installedExtensions: ExtensionManifest[];
-  bookmarks: Bookmark[];
-  tags: Tag[];
+import { useLibraryStore } from '../store/useLibraryStore.js';
+import { useUIStore } from '../store/useUIStore.js';
+
+export interface ExtensionManagerModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  installedExtensions?: ExtensionManifest[];
+  bookmarks?: Bookmark[];
+  tags?: Tag[];
   collections?: Collection[];
-  onAddBookmark: (bookmark: any) => void;
-  onAddTag: (name: string) => void;
+  onAddBookmark?: (bookmark: any) => void;
+  onAddTag?: (name: string) => void;
   onAddCollection?: (name: string, color?: string, description?: string) => any;
-  onLogAudit: (
+  onLogAudit?: (
     type: any,
     status: any,
     details?: Record<string, unknown>,
@@ -21,18 +24,30 @@ interface ExtensionManagerModalProps {
   ) => void;
 }
 
-export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = ({
-  isOpen,
-  onClose,
-  installedExtensions,
-  bookmarks,
-  tags,
-  collections = [],
-  onAddBookmark,
-  onAddTag,
-  onAddCollection,
-  onLogAudit,
-}) => {
+export const ExtensionManagerModal: React.FC<ExtensionManagerModalProps> = (props) => {
+  const storeIsOpen = useUIStore((s) => s.activeModal === 'extension');
+  const storeCloseModal = useUIStore((s) => s.closeModal);
+
+  const storeInstalledExtensions = useLibraryStore((s) => s.installedExtensions);
+  const storeBookmarks = useLibraryStore((s) => s.bookmarks);
+  const storeTags = useLibraryStore((s) => s.tags);
+  const storeCollections = useLibraryStore((s) => s.collections);
+  const storeAddBookmark = useLibraryStore((s) => s.addBookmark);
+  const storeAddTag = useLibraryStore((s) => s.addTag);
+  const storeAddCollection = useLibraryStore((s) => s.addCollection);
+  const storeLogAudit = useLibraryStore((s) => s.logAudit);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const onClose = props.onClose || storeCloseModal;
+  const installedExtensions = props.installedExtensions || storeInstalledExtensions;
+  const bookmarks = props.bookmarks || storeBookmarks;
+  const tags = props.tags || storeTags;
+  const collections = props.collections || storeCollections;
+  const onAddBookmark = props.onAddBookmark || storeAddBookmark;
+  const onAddTag = props.onAddTag || storeAddTag;
+  const onAddCollection = props.onAddCollection || storeAddCollection;
+  const onLogAudit = props.onLogAudit || storeLogAudit;
+
   const [runningExtId, setRunningExtId] = useState<string | null>(null);
   const [executionOutput, setExecutionOutput] = useState<string | null>(null);
   const [importInput, setImportInput] = useState('');
